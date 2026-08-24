@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A friend/family member who can be part of one or more shared subscriptions.
+model Person {
+  id          String       @id @default(cuid())
+  name        String
+  phone       String?
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  payments    Payment[]
+}
+
+// A recurring shared bill, e.g. "YouTube Premium" or "ATT Family Plan".
+model Subscription {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  amount      Float // default total monthly amount, used to prefill new cycles
+  splitType   String        @default("equal") // "equal" | "custom"
+  dueDay      Int? // day of month payment is due, 1-31
+  createdAt   DateTime      @default(now())
+  memberships Membership[]
+  cycles      BillCycle[]
+}
+
+// Links a Person to a Subscription's group, with an optional fixed custom share.
+model Membership {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  personId       String
+  customShare    Float? // only used when subscription.splitType === "custom"
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  person         Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, personId])
+}
+
+// One month's instance of a subscription's bill.
+model BillCycle {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  periodLabel    String // e.g. "2026-08"
+  totalAmount    Float
+  dueDate        DateTime?
+  billFilePath   String? // uploaded bill stored under /public/uploads
+  billFileName   String?
+  extractedNote  String? // best-effort note from automatic bill parsing
+  createdAt      DateTime     @default(now())
+  payments       Payment[]
+
+  @@unique([subscriptionId, periodLabel])
+}
+
+// One person's share of one month's bill.
+model Payment {
+  id          String    @id @default(cuid())
+  billCycleId String
+  billCycle   BillCycle @relation(fields: [billCycleId], references: [id], onDelete: Cascade)
+  personId    String
+  person      Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  amountOwed  Float
+  paid        Boolean   @default(false)
+  paidAt      DateTime?
+
+  @@unique([billCycleId, personId])
+}
