@@ -12,7 +12,9 @@ calculated automatically, and you check people off as they pay you back.
   directly from forms)
 - **Prisma + SQLite** for storage — zero setup, single file database
 - **Tailwind CSS** for styling
-- `pdf-parse` for best-effort auto-extraction of a bill's total from an uploaded PDF
+- `pdf-parse` for best-effort auto-extraction of a bill's total — and, for
+  carrier bills that itemize charges by phone line, a full per-line-item
+  split — from an uploaded PDF
 
 ## Getting started
 
@@ -47,9 +49,17 @@ To reset all data at any point: delete `prisma/dev.db` and re-run `npx prisma mi
    that month's cycle and splits the total across current members (equal
    split by default, or each person's fixed custom share if you set the
    subscription to custom splitting).
-4. Optionally **upload the actual bill** (PDF) to that cycle. If it's a PDF
-   with a text layer, BillTracker looks for a line like "Total Due: $145.32"
-   and automatically re-splits the cycle using that amount.
+4. Optionally **upload the actual bill** (PDF) to that cycle:
+   - If it's a phone/carrier-style bill that itemizes charges per line
+     (look for a repeated "Total for &lt;phone number&gt;" pattern — this is
+     how AT&T bills are formatted, and likely others), BillTracker extracts
+     every line's phone number and exact charge, matches each one to an
+     existing person by phone number (or creates a new person named
+     `User12`, `User13`, ... if no match exists), sets the subscription to
+     custom splitting, and rebuilds that cycle's payments to match the bill
+     exactly — no manual entry required.
+   - Otherwise, it falls back to looking for a single line like
+     "Total Due: $145.32" and re-splits the cycle evenly using that amount.
 5. As friends pay you back, click **Mark paid** next to their name.
 6. The **Dashboard** rolls up every unpaid share across every subscription,
    grouped by person with their phone number handy, flags anything past its
@@ -68,13 +78,15 @@ appetite for the migration.
 
 Roughly in order of how much value they'd add relative to effort:
 
-- **Smarter bill parsing.** Today a PDF is scanned for one "total due"-style
-  line. A real phone or utility bill often has *itemized* charges per line
-  (e.g. "Jordan's line: $32.00"). Feeding the extracted text through an LLM
-  (e.g. the Claude API) instead of regex could propose a full per-person
-  split automatically, with the user just confirming it. Image bills (photos
-  of a receipt) would need real OCR first — Tesseract.js or a vision-capable
-  model.
+- **AI-based bill parsing for other formats.** Itemized per-line splitting
+  (see above) is heuristic — it looks for a specific "Total for &lt;phone&gt;"
+  anchor, which covers AT&T-style bills but not every carrier's layout, and
+  it can't tell a meaningful per-person label from a repeated account-holder
+  name. Feeding the extracted text (or a photo) through an LLM instead of a
+  fixed regex could generalize to any bill format and any kind of shared
+  expense (utilities, rent, restaurant receipts), not just phone lines.
+  Image bills (photos of a receipt) would also need real OCR first —
+  Tesseract.js or a vision-capable model.
 - **Reminders.** Since every person already has a phone number on file, an
   obvious next step is one-tap reminders — a `tel:`/SMS deep link, or actual
   automated texts (Twilio) / WhatsApp messages when a share is overdue.
