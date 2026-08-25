@@ -7,7 +7,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { prisma } from "./prisma";
 import { currentPeriodLabel, dueDateForPeriod } from "./period";
-import { tryExtractTotalFromPdf } from "./parseBill";
+import { normalizePhoneDigits, tryExtractLineItemsFromPdf, tryExtractTotalFromPdf } from "./parseBill";
 
 function splitEqually(total: number, count: number): number[] {
   if (count === 0) return [];
@@ -187,6 +187,78 @@ export async function togglePayment(subscriptionId: string, paymentId: string) {
   revalidatePath("/");
 }
 
+// Finds or creates a Person for a bill line's phone number, matching by
+// digits-only phone against everyone in the system (not just current
+// members) so a person billed elsewhere is recognized rather than
+// duplicated. New people are named sequentially ("User12") unless the bill
+// itself prints a usable per-line name.
+async function resolvePersonForLine(phoneDigits: string, name: string | null, nextUserNumberRef: { n: number }) {
+  const people = await prisma.person.findMany();
+  const existing = people.find((p) => p.phone && normalizePhoneDigits(p.phone) === phoneDigits);
+  if (existing) return { person: existing, created: false };
+
+  const phoneFormatted = `${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 6)}-${phoneDigits.slice(6)}`;
+  const personName = name || `User${nextUserNumberRef.n++}`;
+  const person = await prisma.person.create({ data: { name: personName, phone: phoneFormatted } });
+  return { person, created: true };
+}
+
+async function applyLineItemExtraction(
+  subscriptionId: string,
+  cycleId: string,
+  items: { phoneDigits: string; amount: number; name: string | null }[]
+) {
+  const existingPeople = await prisma.person.findMany();
+  const userNumbers = existingPeople
+    .map((p) => p.name.match(/^User(\d+)$/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => parseInt(m[1], 10));
+  const nextUserNumberRef = { n: (userNumbers.length ? Math.max(...userNumbers) : 0) + 1 };
+
+  let createdCount = 0;
+  let matchedCount = 0;
+  const resolved: { personId: string; amount: number }[] = [];
+
+  for (const item of items) {
+    const { person, created } = await resolvePersonForLine(item.phoneDigits, item.name, nextUserNumberRef);
+    if (created) createdCount++;
+    else matchedCount++;
+
+    await prisma.membership.upsert({
+      where: { subscriptionId_personId: { subscriptionId, personId: person.id } },
+      update: { customShare: item.amount },
+      create: { subscriptionId, personId: person.id, customShare: item.amount },
+    });
+    resolved.push({ personId: person.id, amount: item.amount });
+  }
+
+  await prisma.subscription.update({ where: { id: subscriptionId }, data: { splitType: "custom" } });
+
+  const existingPayments = await prisma.payment.findMany({ where: { billCycleId: cycleId } });
+  const paidByPerson = new Map(existingPayments.filter((p) => p.paid).map((p) => [p.personId, p.paidAt]));
+  await prisma.payment.deleteMany({ where: { billCycleId: cycleId } });
+  await Promise.all(
+    resolved.map((r) =>
+      prisma.payment.create({
+        data: {
+          billCycleId: cycleId,
+          personId: r.personId,
+          amountOwed: r.amount,
+          paid: paidByPerson.has(r.personId),
+          paidAt: paidByPerson.get(r.personId) ?? null,
+        },
+      })
+    )
+  );
+
+  const total = Math.round(resolved.reduce((sum, r) => sum + r.amount, 0) * 100) / 100;
+  const parts = [`Auto-detected ${items.length} per-line charges totaling $${total.toFixed(2)} from the uploaded PDF.`];
+  if (matchedCount > 0) parts.push(`Matched ${matchedCount} existing ${matchedCount === 1 ? "person" : "people"} by phone number.`);
+  if (createdCount > 0) parts.push(`Added ${createdCount} new ${createdCount === 1 ? "person" : "people"} to this subscription.`);
+
+  return { total, note: parts.join(" ") };
+}
+
 export async function uploadBillFile(subscriptionId: string, cycleId: string, formData: FormData) {
   const file = formData.get("bill") as File | null;
   if (!file || file.size === 0) throw new Error("Choose a file to upload");
@@ -209,21 +281,30 @@ export async function uploadBillFile(subscriptionId: string, cycleId: string, fo
   };
 
   if (file.type === "application/pdf" || safeName.toLowerCase().endsWith(".pdf")) {
-    const result = await tryExtractTotalFromPdf(buffer);
-    extractedNote = result.note;
-    updateData.extractedNote = extractedNote;
+    const lineResult = await tryExtractLineItemsFromPdf(buffer);
 
-    if (result.amount != null) {
-      const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
-      const cycle = await prisma.billCycle.findUniqueOrThrow({ where: { id: cycleId }, include: { payments: true } });
+    if (lineResult.items.length >= 2) {
+      const { total, note } = await applyLineItemExtraction(subscriptionId, cycleId, lineResult.items);
+      extractedNote = note;
+      updateData.extractedNote = extractedNote;
+      updateData.totalAmount = total;
+    } else {
+      const result = await tryExtractTotalFromPdf(buffer);
+      extractedNote = result.note;
+      updateData.extractedNote = extractedNote;
 
-      updateData.totalAmount = result.amount;
+      if (result.amount != null) {
+        const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+        const cycle = await prisma.billCycle.findUniqueOrThrow({ where: { id: cycleId }, include: { payments: true } });
 
-      if (subscription.splitType !== "custom") {
-        const shares = splitEqually(result.amount, cycle.payments.length);
-        await Promise.all(
-          cycle.payments.map((p, i) => prisma.payment.update({ where: { id: p.id }, data: { amountOwed: shares[i] } }))
-        );
+        updateData.totalAmount = result.amount;
+
+        if (subscription.splitType !== "custom") {
+          const shares = splitEqually(result.amount, cycle.payments.length);
+          await Promise.all(
+            cycle.payments.map((p, i) => prisma.payment.update({ where: { id: p.id }, data: { amountOwed: shares[i] } }))
+          );
+        }
       }
     }
   } else {
