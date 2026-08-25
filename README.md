@@ -26,6 +26,11 @@ npm run dev                 # http://localhost:3000
 
 To reset all data at any point: delete `prisma/dev.db` and re-run `npx prisma migrate deploy`.
 
+Want to run this permanently on your own hardware (e.g. a Raspberry Pi) instead
+of just locally? See [`deploy/README.md`](deploy/README.md) for a step-by-step
+guide, including a systemd service so it survives reboots and a backup script
+for a network drive.
+
 ## Data model
 
 - **Person** — name + phone number, reusable across any number of subscriptions.

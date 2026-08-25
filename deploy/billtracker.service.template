@@ -1,0 +1,23 @@
+[Unit]
+Description=BillTracker (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=DATABASE_URL=file:__APP_DIR__/prisma/dev.db
+ExecStart=__NPM_BIN__ start
+Restart=on-failure
+RestartSec=5
+
+# Basic hardening - the service only needs its own app directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=__APP_DIR__
+
+[Install]
+WantedBy=multi-user.target
