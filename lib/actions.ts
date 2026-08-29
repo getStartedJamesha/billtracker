@@ -7,7 +7,12 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { prisma } from "./prisma";
 import { currentPeriodLabel, dueDateForPeriod, periodLabelToDisplay } from "./period";
-import { normalizePhoneDigits, tryExtractLineItemsFromPdf, tryExtractTotalFromPdf } from "./parseBill";
+import {
+  normalizePhoneDigits,
+  tryExtractBillPeriodFromPdf,
+  tryExtractLineItemsFromPdf,
+  tryExtractTotalFromPdf,
+} from "./parseBill";
 
 function splitEqually(total: number, count: number): number[] {
   if (count === 0) return [];
@@ -334,6 +339,34 @@ export async function deleteCycle(subscriptionId: string, cycleId: string) {
   revalidatePath("/");
 }
 
+// Renames an already-generated cycle's month - for correcting one that was
+// mislabeled before this app could auto-detect a bill's own issue date, or
+// any other manual fix.
+export async function updateCyclePeriod(subscriptionId: string, cycleId: string, formData: FormData) {
+  const periodLabel = String(formData.get("periodLabel") || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(periodLabel)) {
+    throw new Error("Enter the month as YYYY-MM, e.g. 2026-07.");
+  }
+
+  const cycle = await prisma.billCycle.findUniqueOrThrow({ where: { id: cycleId } });
+  if (periodLabel === cycle.periodLabel) return;
+
+  const conflict = await prisma.billCycle.findUnique({
+    where: { subscriptionId_periodLabel: { subscriptionId, periodLabel } },
+  });
+  if (conflict) {
+    throw new Error(`A bill for ${periodLabelToDisplay(periodLabel)} already exists - merge or delete one first.`);
+  }
+
+  const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+  await prisma.billCycle.update({
+    where: { id: cycleId },
+    data: { periodLabel, dueDate: dueDateForPeriod(periodLabel, subscription.dueDay) },
+  });
+  revalidatePath(`/subscriptions/${subscriptionId}`);
+  revalidatePath("/");
+}
+
 export async function togglePayment(subscriptionId: string, paymentId: string) {
   const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
   await prisma.payment.update({
@@ -454,29 +487,59 @@ export async function uploadBillFile(subscriptionId: string, cycleId: string, fo
   await fs.writeFile(path.join(uploadsDir, storedName), buffer);
 
   let extractedNote = "File uploaded.";
-  let updateData: { billFilePath: string; billFileName: string; extractedNote: string; totalAmount?: number } = {
+  let updateData: {
+    billFilePath: string;
+    billFileName: string;
+    extractedNote: string;
+    totalAmount?: number;
+    periodLabel?: string;
+    dueDate?: Date | null;
+  } = {
     billFilePath: `/uploads/${storedName}`,
     billFileName: file.name,
     extractedNote,
   };
 
   if (file.type === "application/pdf" || safeName.toLowerCase().endsWith(".pdf")) {
+    const [cycle, subscription] = await Promise.all([
+      prisma.billCycle.findUniqueOrThrow({ where: { id: cycleId }, include: { payments: true } }),
+      prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } }),
+    ]);
+
+    // The bill's own issue date often falls in a different calendar month
+    // than whichever month the cycle happened to be created under (carriers
+    // commonly issue next month's bill a few days early) - relabel the
+    // cycle to match the bill's actual content when that's safe to do.
+    let periodNote: string | null = null;
+    const periodResult = await tryExtractBillPeriodFromPdf(buffer);
+    if (periodResult.periodLabel && periodResult.periodLabel !== cycle.periodLabel) {
+      const conflict = await prisma.billCycle.findUnique({
+        where: { subscriptionId_periodLabel: { subscriptionId, periodLabel: periodResult.periodLabel } },
+      });
+      if (conflict) {
+        periodNote = `Note: this bill's issue date (${periodResult.issueDateText}) suggests it belongs to ${periodLabelToDisplay(
+          periodResult.periodLabel
+        )}, but that month already has a separate bill here - check for a duplicate.`;
+      } else {
+        updateData.periodLabel = periodResult.periodLabel;
+        updateData.dueDate = dueDateForPeriod(periodResult.periodLabel, subscription.dueDay);
+        periodNote = `Relabeled from ${periodLabelToDisplay(cycle.periodLabel)} to ${periodLabelToDisplay(
+          periodResult.periodLabel
+        )} based on this bill's issue date (${periodResult.issueDateText}).`;
+      }
+    }
+
     const lineResult = await tryExtractLineItemsFromPdf(buffer);
 
     if (lineResult.items.length >= 2) {
       const { total, note } = await applyLineItemExtraction(subscriptionId, cycleId, lineResult.items);
       extractedNote = note;
-      updateData.extractedNote = extractedNote;
       updateData.totalAmount = total;
     } else {
       const result = await tryExtractTotalFromPdf(buffer);
       extractedNote = result.note;
-      updateData.extractedNote = extractedNote;
 
       if (result.amount != null) {
-        const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
-        const cycle = await prisma.billCycle.findUniqueOrThrow({ where: { id: cycleId }, include: { payments: true } });
-
         updateData.totalAmount = result.amount;
 
         if (subscription.splitType !== "custom") {
@@ -487,6 +550,9 @@ export async function uploadBillFile(subscriptionId: string, cycleId: string, fo
         }
       }
     }
+
+    if (periodNote) extractedNote = `${extractedNote} ${periodNote}`;
+    updateData.extractedNote = extractedNote;
   } else {
     extractedNote = "Image uploaded for reference. Automatic amount detection currently only supports PDF bills — enter the total manually if needed.";
     updateData.extractedNote = extractedNote;
