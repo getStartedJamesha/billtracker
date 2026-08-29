@@ -38,6 +38,7 @@ cd billtracker
 
 # 3. Install, migrate, build
 npm install
+echo 'DATABASE_URL="file:./dev.db"' > .env   # .env is gitignored, so a fresh clone won't have one
 npx prisma migrate deploy
 npm run build
 
@@ -127,6 +128,11 @@ sudo journalctl -u billtracker -f     # live logs
 
 ## Troubleshooting
 
+- **`Error: Environment variable not found: DATABASE_URL` during migrations**:
+  `.env` is intentionally excluded from git (see `.gitignore`), so a fresh
+  clone never has one. `deploy/setup.sh` creates it automatically now, but
+  if you're running the manual steps above, create it yourself first:
+  `echo 'DATABASE_URL="file:./dev.db"' > .env`
 - **Build fails with an OpenSSL/Prisma engine error**: make sure you ran
   `npm install` directly on the Pi (ARM64) rather than copying over a
   `node_modules` folder built on a different machine/architecture -

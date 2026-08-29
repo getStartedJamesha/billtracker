@@ -46,6 +46,15 @@ fi
 log "Installing dependencies"
 npm install
 
+# .env is intentionally gitignored (see .gitignore), so a fresh clone never
+# has one - create it with the same default the app uses locally if it's
+# missing, rather than letting `prisma migrate deploy` fail on a missing
+# DATABASE_URL.
+if [ ! -f ".env" ]; then
+  log "Creating .env (not present in a fresh clone by design)"
+  echo 'DATABASE_URL="file:./dev.db"' > .env
+fi
+
 log "Applying database migrations"
 npx prisma migrate deploy
 
