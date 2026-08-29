@@ -53,7 +53,13 @@ for a network drive.
 3. Each month, open the subscription and hit **Generate bill** — it creates
    that month's cycle and splits the total across current members (equal
    split by default, or each person's fixed custom share if you set the
-   subscription to custom splitting).
+   subscription to custom splitting). The month field defaults to the
+   current month (or the one right after your latest bill), but it's a
+   plain text field — change it to any YYYY-MM to backfill a month you
+   missed or get ahead on a future one. Every month is tracked as its own
+   entry in **Bill history**, each with its own total, split, and upload,
+   so nothing about a past or future month gets mixed up with the current
+   one.
 4. For a group you don't want to type in by hand (e.g. everyone on a phone
    carrier bill), you can skip step 2 entirely — just click **Generate
    bill** with no members yet, then upload the PDF:
@@ -89,6 +95,20 @@ duplicate automatically, merges its subscriptions and payment history into
 the person you added it to (summing amounts if both were already on the
 same bill), and removes the now-empty duplicate — nothing to clean up by
 hand.
+
+A person's **name** is editable inline too (useful for replacing an
+auto-generated `User12` with their real name), and a free-text **note**
+next to their name is handy for context that doesn't need a full merge
+(e.g. "same household as Sameena"). If you already know two people are the
+same but don't know their phone number, use **Merge into** on the People
+page to fold one directly into the other by name instead — it carries over
+the merged-away person's phone number and any aliases they had, so a
+future bill upload for that number still resolves correctly.
+
+Once merged, every phone number that resolves to a person shows up
+together (primary + aliases) wherever that person appears — the People
+page, a subscription's Group members table, and the Dashboard's pending
+transfers.
 
 ## Ideas for enhancement
 

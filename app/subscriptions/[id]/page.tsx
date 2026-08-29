@@ -6,20 +6,21 @@ import {
   addNewMember,
   deleteCycle,
   deleteSubscription,
-  generateCycle,
   removeMember,
   togglePayment,
   updateMemberShare,
   uploadBillFile,
 } from "@/lib/actions";
-import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
+import GenerateBillForm from "@/components/GenerateBillForm";
+import { formatPhoneDashed } from "@/lib/parseBill";
+import { currentPeriodLabel, nextPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 
 export default async function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const subscription = await prisma.subscription.findUnique({
     where: { id },
     include: {
-      memberships: { include: { person: true } },
+      memberships: { include: { person: { include: { phoneAliases: true } } } },
       cycles: {
         include: { payments: { include: { person: true } } },
         orderBy: { periodLabel: "desc" },
@@ -36,6 +37,12 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
   });
 
   const hasCurrentCycle = subscription.cycles.some((c) => c.periodLabel === currentPeriodLabel());
+  // Cycles are ordered newest-first; once the current month is already
+  // covered, default the field to the month after the most recent cycle
+  // instead of re-suggesting a month that would just fail as a duplicate.
+  const suggestedPeriodLabel = hasCurrentCycle
+    ? nextPeriodLabel(subscription.cycles[0].periodLabel)
+    : currentPeriodLabel();
 
   return (
     <div className="space-y-8">
@@ -76,7 +83,11 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
                       {m.person.name}
                       {m.person.note && <div className="text-xs font-normal text-slate-400">{m.person.note}</div>}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{m.person.phone || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {[m.person.phone, ...m.person.phoneAliases.map((a) => formatPhoneDashed(a.phone))]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </td>
                     {subscription.splitType === "custom" && (
                       <td className="px-4 py-3">
                         <form action={updateMemberShare.bind(null, subscription.id, m.id)} className="flex items-center gap-2">
@@ -134,43 +145,20 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
       {/* Generate cycle */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">Generate a monthly bill</h2>
-        {hasCurrentCycle ? (
+        {hasCurrentCycle && (
           <p className="text-sm text-slate-500">
             A bill for {periodLabelToDisplay(currentPeriodLabel())} has already been generated below.
+            Need a different month — catching up on one you missed, or getting ahead? Change the month
+            below and generate that one too.
           </p>
-        ) : (
-          <form action={generateCycle.bind(null, subscription.id)} className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Month (YYYY-MM)</label>
-              <input
-                name="periodLabel"
-                defaultValue={currentPeriodLabel()}
-                pattern="\d{4}-\d{2}"
-                className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Total amount ($)</label>
-              <input
-                name="totalAmount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                defaultValue={subscription.amount}
-                className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <button className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-              Generate bill
-            </button>
-            {subscription.memberships.length === 0 && (
-              <p className="text-xs text-slate-500">
-                No members yet — that&apos;s fine. Generate the bill, then upload the PDF below and
-                people will be added automatically from it.
-              </p>
-            )}
-          </form>
         )}
+        <GenerateBillForm
+          subscriptionId={subscription.id}
+          suggestedPeriodLabel={suggestedPeriodLabel}
+          defaultAmount={subscription.amount}
+          existingPeriodLabels={subscription.cycles.map((c) => c.periodLabel)}
+          hasNoMembers={subscription.memberships.length === 0}
+        />
       </section>
 
       {/* Cycles */}

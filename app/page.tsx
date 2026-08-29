@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { togglePayment } from "@/lib/actions";
+import { formatPhoneDashed } from "@/lib/parseBill";
 import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 
 export default async function DashboardPage() {
   const pendingPayments = await prisma.payment.findMany({
     where: { paid: false },
-    include: { person: true, billCycle: { include: { subscription: true } } },
+    include: {
+      person: { include: { phoneAliases: true } },
+      billCycle: { include: { subscription: true } },
+    },
     orderBy: [{ billCycle: { dueDate: "asc" } }],
   });
 
@@ -75,7 +79,14 @@ export default async function DashboardPage() {
                   <div className="mb-3 flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-slate-900">{person.name}</p>
-                      {person.phone && <p className="text-sm text-slate-500">{person.phone}</p>}
+                      {(person.phone || person.phoneAliases.length > 0) && (
+                        <p className="text-sm text-slate-500">
+                          {[person.phone, ...person.phoneAliases.map((a) => formatPhoneDashed(a.phone))]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
+                      {person.note && <p className="text-xs text-slate-400">{person.note}</p>}
                     </div>
                     <p className="text-lg font-bold text-amber-600">${subtotal.toFixed(2)}</p>
                   </div>
