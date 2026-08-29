@@ -43,6 +43,9 @@ for a network drive.
   2026"), with its own total (in case it varies month to month) and an
   optional uploaded bill file.
 - **Payment** — one person's share of one bill cycle, with a paid/unpaid flag.
+- **Charge** — a one-off amount someone owes, logged directly against a
+  person without a Subscription/BillCycle at all (e.g. "Sam owes $20 for
+  dinner").
 
 ## How it's meant to be used
 
@@ -79,7 +82,18 @@ for a network drive.
 6. The **Dashboard** rolls up every unpaid share across every subscription,
    grouped by person with their phone number handy, flags anything past its
    due date as overdue, and calls out any subscription that hasn't had a
-   bill generated yet this month.
+   bill generated yet this month. A **Pending / Paid** toggle at the top of
+   the transfers list switches between what's still owed and everyone who's
+   already settled up.
+7. For a one-time cost that doesn't need a whole subscription (e.g. "Sam
+   owes $20 for dinner"), use **Add a one-off charge** right on the
+   Dashboard — pick who, what for, and how much. It shows up alongside
+   subscription payments in the same person-grouped list, with the same
+   one-tap Mark paid.
+8. Made a mistake on an already-generated bill, or need to add a late fee?
+   Each payment row in a subscription's Bill history has an **Edit amount**
+   toggle to correct just that one person's share, without deleting and
+   regenerating the whole cycle.
 
 ### Merging a phone number into an existing person
 
@@ -136,10 +150,6 @@ Roughly in order of how much value they'd add relative to effort:
   shared use (e.g. two roommates both checking off payments) needs login,
   and probably a notion of "who is the payer" vs. "who owes," rather than
   assuming one implicit account owner.
-- **Editable bill history.** Currently a cycle's total/split is fixed once
-  generated (short of re-uploading a file). Inline editing of an individual
-  person's owed amount after the fact (a late fee, a partial payment) would
-  make it more forgiving.
 - **Notifications/email digest.** A weekly "here's who still owes you"
   summary, rather than requiring someone to open the dashboard.
 - **CSV/export & reporting.** Export a subscription's full payment history,

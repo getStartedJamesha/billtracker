@@ -9,6 +9,7 @@ import {
   removeMember,
   togglePayment,
   updateMemberShare,
+  updatePaymentAmount,
   uploadBillFile,
 } from "@/lib/actions";
 import GenerateBillForm from "@/components/GenerateBillForm";
@@ -214,6 +215,25 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
                           </span>
                         </button>
                       </form>
+                      <details className="px-2 pb-1">
+                        <summary className="cursor-pointer text-xs text-brand-600 hover:underline">
+                          Edit amount
+                        </summary>
+                        <form
+                          action={updatePaymentAmount.bind(null, subscription.id, p.id)}
+                          className="mt-1 flex items-center gap-2 pb-1"
+                        >
+                          <input
+                            name="amountOwed"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={p.amountOwed}
+                            className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          />
+                          <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                        </form>
+                      </details>
                     </li>
                   ))}
                 </ul>
