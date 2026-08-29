@@ -7,7 +7,7 @@ calculated automatically, and you check people off as they pay you back.
 
 ## Stack
 
-- **Next.js 14** (App Router) + TypeScript, React Server Components + Server Actions
+- **Next.js 16** (App Router) + TypeScript, React Server Components + Server Actions
   (no separate REST/API layer — mutations are plain server functions called
   directly from forms)
 - **Prisma + SQLite** for storage — zero setup, single file database
@@ -89,14 +89,6 @@ duplicate automatically, merges its subscriptions and payment history into
 the person you added it to (summing amounts if both were already on the
 same bill), and removes the now-empty duplicate — nothing to clean up by
 hand.
-
-## Known limitation
-
-Dependency audit flags several Next.js/PostCSS advisories that are only fully
-resolved by upgrading to Next 15/16 (a breaking change to the app's routing
-and config APIs). None of the affected surfaces (image optimizer, middleware,
-edge server actions) are used by this app. Worth revisiting when there's
-appetite for the migration.
 
 ## Ideas for enhancement
 

@@ -14,9 +14,10 @@ import {
 } from "@/lib/actions";
 import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 
-export default async function SubscriptionDetailPage({ params }: { params: { id: string } }) {
+export default async function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const subscription = await prisma.subscription.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       memberships: { include: { person: true } },
       cycles: {
