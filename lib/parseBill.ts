@@ -14,6 +14,16 @@ const TOTAL_PATTERNS = [
 // charges by phone line, e.g. "Total for 515.661.0304$32.00" (AT&T-style).
 const LINE_TOTAL_PATTERN = /total\s+for\s+(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})\s*\$?\s*([\d,]+\.\d{2})/gi;
 
+// Matches the date a bill was actually issued/generated, e.g.
+// "Issue Date:Jul 28, 2026" (AT&T-style) - a carrier commonly issues next
+// month's bill a few days before month-end, so "the month you uploaded it
+// in" and "the month printed on the bill" are often different months.
+const BILL_DATE_PATTERNS = [
+  /issue date:?\s*([A-Za-z]{3,9}\.?\s+\d{1,2},?\s*\d{4})/i,
+  /bill date:?\s*([A-Za-z]{3,9}\.?\s+\d{1,2},?\s*\d{4})/i,
+  /statement date:?\s*([A-Za-z]{3,9}\.?\s+\d{1,2},?\s*\d{4})/i,
+];
+
 // Matches a friendly name printed near a phone line's detail section, e.g.
 // "Phone, 515.661.0304\nIMRAN SHAH AMAN SHAH" or "Wearable, 651.324.0528\n...".
 function findLineName(text: string, phoneDigits: string): string | null {
@@ -53,6 +63,32 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   const pdfParse = (await import("pdf-parse")).default;
   const data = await pdfParse(buffer);
   return data.text || "";
+}
+
+export interface BillPeriodResult {
+  periodLabel: string | null;
+  issueDateText: string | null;
+}
+
+// Reads the bill's own printed issue/bill/statement date and returns which
+// YYYY-MM period it actually belongs to, so a cycle can be labeled by the
+// bill's real content instead of just whatever month it happened to be
+// uploaded in.
+export async function tryExtractBillPeriodFromPdf(buffer: Buffer): Promise<BillPeriodResult> {
+  try {
+    const text = await extractPdfText(buffer);
+    for (const pattern of BILL_DATE_PATTERNS) {
+      const match = text.match(pattern);
+      if (!match) continue;
+      const date = new Date(match[1]);
+      if (Number.isNaN(date.getTime())) continue;
+      const periodLabel = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      return { periodLabel, issueDateText: match[1].trim() };
+    }
+    return { periodLabel: null, issueDateText: null };
+  } catch {
+    return { periodLabel: null, issueDateText: null };
+  }
 }
 
 export async function tryExtractTotalFromPdf(buffer: Buffer): Promise<BillParseResult> {

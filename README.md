@@ -76,6 +76,13 @@ for a network drive.
      cycle's payments to match the bill exactly — no manual entry required.
    - Otherwise, it falls back to looking for a single line like
      "Total Due: $145.32" and re-splits the cycle evenly using that amount.
+   - It also reads the bill's own issue/bill/statement date and, if that
+     falls in a different month than the cycle you uploaded it to (carriers
+     often issue next month's bill a few days early), relabels the cycle to
+     match — so "the July bill" stays filed as July even if you happened to
+     upload it in August. If that would collide with a bill you've already
+     generated for that other month, it leaves the label alone and adds a
+     note instead of guessing.
 5. As friends pay you back, tap their row (or **Mark paid**) — it's a
    single tap, no confirmation dialog, and it flips right back if you tap
    it again by mistake.
