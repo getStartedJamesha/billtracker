@@ -12,6 +12,7 @@ import {
   updateMemberShare,
   uploadBillFile,
 } from "@/lib/actions";
+import { formatPhoneDashed } from "@/lib/parseBill";
 import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 
 export default async function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +20,7 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
   const subscription = await prisma.subscription.findUnique({
     where: { id },
     include: {
-      memberships: { include: { person: true } },
+      memberships: { include: { person: { include: { phoneAliases: true } } } },
       cycles: {
         include: { payments: { include: { person: true } } },
         orderBy: { periodLabel: "desc" },
@@ -76,7 +77,11 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
                       {m.person.name}
                       {m.person.note && <div className="text-xs font-normal text-slate-400">{m.person.note}</div>}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{m.person.phone || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {[m.person.phone, ...m.person.phoneAliases.map((a) => formatPhoneDashed(a.phone))]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </td>
                     {subscription.splitType === "custom" && (
                       <td className="px-4 py-3">
                         <form action={updateMemberShare.bind(null, subscription.id, m.id)} className="flex items-center gap-2">
