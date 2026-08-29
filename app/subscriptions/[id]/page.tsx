@@ -156,14 +156,14 @@ export default async function SubscriptionDetailPage({ params }: { params: { id:
                 className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </div>
-            <button
-              disabled={subscription.memberships.length === 0}
-              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-            >
+            <button className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
               Generate bill
             </button>
             {subscription.memberships.length === 0 && (
-              <p className="text-xs text-slate-500">Add at least one member first.</p>
+              <p className="text-xs text-slate-500">
+                No members yet — that&apos;s fine. Generate the bill, then upload the PDF below and
+                people will be added automatically from it.
+              </p>
             )}
           </form>
         )}
@@ -194,20 +194,32 @@ export default async function SubscriptionDetailPage({ params }: { params: { id:
 
                 <ul className="mt-3 divide-y divide-slate-100">
                   {cycle.payments.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between py-2 text-sm">
-                      <div>
-                        <span className="font-medium text-slate-800">{p.person.name}</span>
-                        <span className="ml-2 text-slate-500">${p.amountOwed.toFixed(2)}</span>
-                      </div>
+                    <li key={p.id}>
                       <form action={togglePayment.bind(null, subscription.id, p.id)}>
                         <button
-                          className={`rounded-md px-2 py-1 text-xs font-medium ring-1 ${
-                            p.paid
-                              ? "bg-slate-50 text-slate-500 ring-slate-200 hover:bg-slate-100"
-                              : "bg-green-50 text-green-700 ring-green-200 hover:bg-green-100"
+                          type="submit"
+                          title="Tap to toggle paid status"
+                          className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-3 text-left text-sm transition active:scale-[0.99] ${
+                            p.paid ? "bg-slate-50" : "hover:bg-green-50"
                           }`}
                         >
-                          {p.paid ? "Paid ✓ (undo)" : "Mark paid"}
+                          <span className="flex items-center gap-3">
+                            <span
+                              className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                                p.paid
+                                  ? "border-green-500 bg-green-500 text-white"
+                                  : "border-slate-300 text-transparent"
+                              }`}
+                            >
+                              ✓
+                            </span>
+                            <span className={`font-medium ${p.paid ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                              {p.person.name}
+                            </span>
+                          </span>
+                          <span className={`font-medium ${p.paid ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                            ${p.amountOwed.toFixed(2)}
+                          </span>
                         </button>
                       </form>
                     </li>

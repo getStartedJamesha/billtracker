@@ -38,6 +38,97 @@ export async function deletePerson(personId: string) {
   revalidatePath("/");
 }
 
+// Moves everything belonging to `fromPersonId` (subscription memberships and
+// bill payments) onto `intoPersonId`, combining amounts where both are
+// already on the same subscription/cycle, then removes the now-empty
+// duplicate. Used when a phone number turns out to belong to someone who
+// already has their own Person record (e.g. a bill auto-created separate
+// entries for a spouse's or child's line before it was aliased).
+async function mergePersonInto(fromPersonId: string, intoPersonId: string) {
+  const [fromMemberships, fromPayments] = await Promise.all([
+    prisma.membership.findMany({ where: { personId: fromPersonId } }),
+    prisma.payment.findMany({ where: { personId: fromPersonId } }),
+  ]);
+
+  for (const m of fromMemberships) {
+    const existing = await prisma.membership.findUnique({
+      where: { subscriptionId_personId: { subscriptionId: m.subscriptionId, personId: intoPersonId } },
+    });
+    if (existing) {
+      const combinedShare = (existing.customShare ?? 0) + (m.customShare ?? 0);
+      await prisma.membership.update({ where: { id: existing.id }, data: { customShare: combinedShare } });
+      await prisma.membership.delete({ where: { id: m.id } });
+    } else {
+      await prisma.membership.update({ where: { id: m.id }, data: { personId: intoPersonId } });
+    }
+  }
+
+  for (const p of fromPayments) {
+    const existing = await prisma.payment.findUnique({
+      where: { billCycleId_personId: { billCycleId: p.billCycleId, personId: intoPersonId } },
+    });
+    if (existing) {
+      await prisma.payment.update({
+        where: { id: existing.id },
+        data: {
+          amountOwed: existing.amountOwed + p.amountOwed,
+          paid: existing.paid && p.paid,
+          paidAt: existing.paid && p.paid ? existing.paidAt : null,
+        },
+      });
+      await prisma.payment.delete({ where: { id: p.id } });
+    } else {
+      await prisma.payment.update({ where: { id: p.id }, data: { personId: intoPersonId } });
+    }
+  }
+
+  await prisma.person.delete({ where: { id: fromPersonId } });
+}
+
+// Attaches an extra phone number (e.g. a spouse's or child's line) to an
+// existing person, so bill parsing bills that line to them instead of
+// creating a separate person for it. If that number already belongs to a
+// different person (e.g. an earlier bill upload auto-created a separate
+// entry for it before it was aliased), that duplicate is merged into this
+// person - their subscriptions and payment history move over - instead of
+// being left behind as an orphaned record.
+export async function addPhoneAlias(personId: string, formData: FormData) {
+  const raw = String(formData.get("phone") || "").trim();
+  if (!raw) throw new Error("Phone number is required");
+
+  const phoneDigits = normalizePhoneDigits(raw);
+  if (phoneDigits.length !== 10) throw new Error("Enter a 10-digit phone number");
+
+  const target = await prisma.person.findUniqueOrThrow({ where: { id: personId } });
+  if (target.phone && normalizePhoneDigits(target.phone) === phoneDigits) {
+    throw new Error("That's already this person's own phone number");
+  }
+
+  const existingAlias = await prisma.personPhone.findUnique({ where: { phone: phoneDigits } });
+  if (existingAlias) {
+    if (existingAlias.personId === personId) return; // already aliased here
+    throw new Error("That number is already mapped to another person");
+  }
+
+  const peopleWithPhone = await prisma.person.findMany({ where: { phone: { not: null } } });
+  const primaryOwner = peopleWithPhone.find(
+    (p) => p.id !== personId && p.phone && normalizePhoneDigits(p.phone) === phoneDigits
+  );
+  if (primaryOwner) {
+    await mergePersonInto(primaryOwner.id, personId);
+  }
+
+  await prisma.personPhone.create({ data: { personId, phone: phoneDigits } });
+  revalidatePath("/people");
+  revalidatePath("/subscriptions");
+  revalidatePath("/");
+}
+
+export async function removePhoneAlias(aliasId: string) {
+  await prisma.personPhone.delete({ where: { id: aliasId } });
+  revalidatePath("/people");
+}
+
 // ---------- Subscriptions ----------
 
 export async function createSubscription(formData: FormData) {
@@ -193,8 +284,12 @@ export async function togglePayment(subscriptionId: string, paymentId: string) {
 // duplicated. New people are named sequentially ("User12") unless the bill
 // itself prints a usable per-line name.
 async function resolvePersonForLine(phoneDigits: string, name: string | null, nextUserNumberRef: { n: number }) {
-  const people = await prisma.person.findMany();
-  const existing = people.find((p) => p.phone && normalizePhoneDigits(p.phone) === phoneDigits);
+  const people = await prisma.person.findMany({ include: { phoneAliases: true } });
+  const existing = people.find(
+    (p) =>
+      (p.phone && normalizePhoneDigits(p.phone) === phoneDigits) ||
+      p.phoneAliases.some((a) => a.phone === phoneDigits)
+  );
   if (existing) return { person: existing, created: false };
 
   const phoneFormatted = `${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 6)}-${phoneDigits.slice(6)}`;
@@ -217,20 +312,27 @@ async function applyLineItemExtraction(
 
   let createdCount = 0;
   let matchedCount = 0;
-  const resolved: { personId: string; amount: number }[] = [];
+  // Multiple bill lines can resolve to the same person (e.g. a spouse's or
+  // child's line aliased to them) - aggregate their amounts rather than
+  // creating duplicate memberships/payments for the same person.
+  const amountByPerson = new Map<string, number>();
 
   for (const item of items) {
     const { person, created } = await resolvePersonForLine(item.phoneDigits, item.name, nextUserNumberRef);
     if (created) createdCount++;
     else matchedCount++;
-
-    await prisma.membership.upsert({
-      where: { subscriptionId_personId: { subscriptionId, personId: person.id } },
-      update: { customShare: item.amount },
-      create: { subscriptionId, personId: person.id, customShare: item.amount },
-    });
-    resolved.push({ personId: person.id, amount: item.amount });
+    amountByPerson.set(person.id, (amountByPerson.get(person.id) ?? 0) + item.amount);
   }
+
+  await Promise.all(
+    Array.from(amountByPerson.entries()).map(([personId, amount]) =>
+      prisma.membership.upsert({
+        where: { subscriptionId_personId: { subscriptionId, personId } },
+        update: { customShare: amount },
+        create: { subscriptionId, personId, customShare: amount },
+      })
+    )
+  );
 
   await prisma.subscription.update({ where: { id: subscriptionId }, data: { splitType: "custom" } });
 
@@ -238,20 +340,20 @@ async function applyLineItemExtraction(
   const paidByPerson = new Map(existingPayments.filter((p) => p.paid).map((p) => [p.personId, p.paidAt]));
   await prisma.payment.deleteMany({ where: { billCycleId: cycleId } });
   await Promise.all(
-    resolved.map((r) =>
+    Array.from(amountByPerson.entries()).map(([personId, amount]) =>
       prisma.payment.create({
         data: {
           billCycleId: cycleId,
-          personId: r.personId,
-          amountOwed: r.amount,
-          paid: paidByPerson.has(r.personId),
-          paidAt: paidByPerson.get(r.personId) ?? null,
+          personId,
+          amountOwed: amount,
+          paid: paidByPerson.has(personId),
+          paidAt: paidByPerson.get(personId) ?? null,
         },
       })
     )
   );
 
-  const total = Math.round(resolved.reduce((sum, r) => sum + r.amount, 0) * 100) / 100;
+  const total = Math.round(Array.from(amountByPerson.values()).reduce((sum, a) => sum + a, 0) * 100) / 100;
   const parts = [`Auto-detected ${items.length} per-line charges totaling $${total.toFixed(2)} from the uploaded PDF.`];
   if (matchedCount > 0) parts.push(`Matched ${matchedCount} existing ${matchedCount === 1 ? "person" : "people"} by phone number.`);
   if (createdCount > 0) parts.push(`Added ${createdCount} new ${createdCount === 1 ? "person" : "people"} to this subscription.`);

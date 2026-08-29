@@ -9,12 +9,25 @@ datasource db {
 
 // A friend/family member who can be part of one or more shared subscriptions.
 model Person {
-  id          String       @id @default(cuid())
-  name        String
-  phone       String?
-  createdAt   DateTime     @default(now())
-  memberships Membership[]
-  payments    Payment[]
+  id           String        @id @default(cuid())
+  name         String
+  phone        String?
+  createdAt    DateTime      @default(now())
+  memberships  Membership[]
+  payments     Payment[]
+  phoneAliases PersonPhone[]
+}
+
+// An additional phone number billed to this person (e.g. a spouse's or
+// child's line on a shared family plan) so bill parsing attributes that
+// line's charge to them instead of creating a separate person.
+model PersonPhone {
+  id       String @id @default(cuid())
+  personId String
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  phone    String // normalized digits-only
+
+  @@unique([phone])
 }
 
 // A recurring shared bill, e.g. "YouTube Premium" or "ATT Family Plan".

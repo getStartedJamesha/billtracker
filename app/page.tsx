@@ -83,31 +83,34 @@ export default async function DashboardPage() {
                     {payments.map((p) => {
                       const overdue = p.billCycle.dueDate && new Date(p.billCycle.dueDate) < today;
                       return (
-                        <li key={p.id} className="flex items-center justify-between py-2 text-sm">
-                          <div>
+                        <li key={p.id} className="py-1">
+                          <div className="flex flex-wrap items-center gap-2 px-1 pt-1 text-xs">
                             <Link
                               href={`/subscriptions/${p.billCycle.subscriptionId}`}
-                              className="font-medium text-slate-800 hover:underline"
+                              className="font-medium text-slate-500 hover:underline"
                             >
                               {p.billCycle.subscription.name}
                             </Link>
-                            <span className="ml-2 text-slate-400">{periodLabelToDisplay(p.billCycle.periodLabel)}</span>
+                            <span className="text-slate-400">{periodLabelToDisplay(p.billCycle.periodLabel)}</span>
                             {overdue && (
-                              <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
-                                overdue
-                              </span>
+                              <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700">overdue</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium text-slate-700">${p.amountOwed.toFixed(2)}</span>
-                            <form
-                              action={togglePayment.bind(null, p.billCycle.subscriptionId, p.id)}
+                          <form action={togglePayment.bind(null, p.billCycle.subscriptionId, p.id)}>
+                            <button
+                              type="submit"
+                              title="Tap to mark paid"
+                              className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition hover:bg-green-50 active:scale-[0.99]"
                             >
-                              <button className="rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-green-200 hover:bg-green-100">
-                                Mark paid
-                              </button>
-                            </form>
-                          </div>
+                              <span className="flex items-center gap-2">
+                                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 border-slate-300 text-xs font-bold text-transparent">
+                                  ✓
+                                </span>
+                                <span className="text-slate-500">Mark paid</span>
+                              </span>
+                              <span className="font-semibold text-slate-800">${p.amountOwed.toFixed(2)}</span>
+                            </button>
+                          </form>
                         </li>
                       );
                     })}

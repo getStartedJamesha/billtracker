@@ -54,22 +54,41 @@ for a network drive.
    that month's cycle and splits the total across current members (equal
    split by default, or each person's fixed custom share if you set the
    subscription to custom splitting).
-4. Optionally **upload the actual bill** (PDF) to that cycle:
+4. For a group you don't want to type in by hand (e.g. everyone on a phone
+   carrier bill), you can skip step 2 entirely — just click **Generate
+   bill** with no members yet, then upload the PDF:
    - If it's a phone/carrier-style bill that itemizes charges per line
      (look for a repeated "Total for &lt;phone number&gt;" pattern — this is
      how AT&T bills are formatted, and likely others), BillTracker extracts
      every line's phone number and exact charge, matches each one to an
-     existing person by phone number (or creates a new person named
-     `User12`, `User13`, ... if no match exists), sets the subscription to
-     custom splitting, and rebuilds that cycle's payments to match the bill
-     exactly — no manual entry required.
+     existing person by phone number or [alias](#merging-a-phone-number-into-an-existing-person)
+     (or creates a new person named `User12`, `User13`, ... if no match
+     exists), sets the subscription to custom splitting, and rebuilds that
+     cycle's payments to match the bill exactly — no manual entry required.
    - Otherwise, it falls back to looking for a single line like
      "Total Due: $145.32" and re-splits the cycle evenly using that amount.
-5. As friends pay you back, click **Mark paid** next to their name.
+5. As friends pay you back, tap their row (or **Mark paid**) — it's a
+   single tap, no confirmation dialog, and it flips right back if you tap
+   it again by mistake.
 6. The **Dashboard** rolls up every unpaid share across every subscription,
    grouped by person with their phone number handy, flags anything past its
    due date as overdue, and calls out any subscription that hasn't had a
    bill generated yet this month.
+
+### Merging a phone number into an existing person
+
+Some bills print two lines for what's really one person — a spouse's line, a
+kid's line, a wearable/watch line on the same account. On the **People**
+page, use the "+ add number" field next to anyone to attach an extra phone
+number to them. From then on, a bill line for that number is billed to that
+person instead of creating a separate one.
+
+If a bill was already uploaded before you added the alias (so a duplicate
+person already exists for that number), adding the alias detects the
+duplicate automatically, merges its subscriptions and payment history into
+the person you added it to (summing amounts if both were already on the
+same bill), and removes the now-empty duplicate — nothing to clean up by
+hand.
 
 ## Known limitation
 
