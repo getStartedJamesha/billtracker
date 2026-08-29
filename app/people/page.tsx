@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { addPhoneAlias, createPerson, deletePerson, removePhoneAlias, updatePersonNote } from "@/lib/actions";
+import { addPhoneAlias, createPerson, deletePerson, removePhoneAlias, updatePersonName, updatePersonNote } from "@/lib/actions";
 import { formatPhoneDashed } from "@/lib/parseBill";
 
 export default async function PeoplePage() {
@@ -65,7 +65,15 @@ export default async function PeoplePage() {
               {people.map((person) => (
                 <tr key={person.id}>
                   <td className="px-4 py-3 font-medium text-slate-900">
-                    {person.name}
+                    <form action={updatePersonName.bind(null, person.id)} className="flex gap-1">
+                      <input
+                        name="name"
+                        required
+                        defaultValue={person.name}
+                        className="w-40 rounded border border-slate-300 px-2 py-1 text-sm font-medium text-slate-900 focus:border-brand-500 focus:outline-none"
+                      />
+                      <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                    </form>
                     <form action={updatePersonNote.bind(null, person.id)} className="mt-1 flex gap-1">
                       <input
                         name="note"

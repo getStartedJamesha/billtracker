@@ -38,6 +38,19 @@ export async function deletePerson(personId: string) {
   revalidatePath("/");
 }
 
+// Renames a person - most useful for replacing an auto-generated "User12"
+// (from itemized bill parsing, or the surviving side of a phone-alias merge)
+// with their real name.
+export async function updatePersonName(personId: string, formData: FormData) {
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Name is required");
+
+  await prisma.person.update({ where: { id: personId }, data: { name } });
+  revalidatePath("/people");
+  revalidatePath("/subscriptions");
+  revalidatePath("/");
+}
+
 // Free-text context shown next to a person's name, e.g. to note that two
 // people share a household or a phone plan without merging them into one.
 export async function updatePersonNote(personId: string, formData: FormData) {
