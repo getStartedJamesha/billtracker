@@ -6,7 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { prisma } from "./prisma";
-import { currentPeriodLabel, dueDateForPeriod } from "./period";
+import { currentPeriodLabel, dueDateForPeriod, periodLabelToDisplay } from "./period";
 import { normalizePhoneDigits, tryExtractLineItemsFromPdf, tryExtractTotalFromPdf } from "./parseBill";
 
 function splitEqually(total: number, count: number): number[] {
@@ -288,12 +288,17 @@ export async function generateCycle(subscriptionId: string, formData: FormData) 
   });
 
   const periodLabel = String(formData.get("periodLabel") || currentPeriodLabel());
+  if (!/^\d{4}-\d{2}$/.test(periodLabel)) {
+    throw new Error("Enter the month as YYYY-MM, e.g. 2026-09.");
+  }
   const totalAmount = parseFloat(String(formData.get("totalAmount") || subscription.amount));
 
   const existing = await prisma.billCycle.findUnique({
     where: { subscriptionId_periodLabel: { subscriptionId, periodLabel } },
   });
-  if (existing) throw new Error(`A bill cycle for ${periodLabel} already exists`);
+  if (existing) {
+    throw new Error(`A bill for ${periodLabelToDisplay(periodLabel)} already exists below - edit that one instead.`);
+  }
 
   const memberships = subscription.memberships;
   const equalShares = splitEqually(totalAmount, memberships.length);
