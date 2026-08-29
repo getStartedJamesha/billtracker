@@ -12,6 +12,7 @@ model Person {
   id           String        @id @default(cuid())
   name         String
   phone        String?
+  note         String? // free-text context shown next to their name, e.g. "same household as Sameena"
   createdAt    DateTime      @default(now())
   memberships  Membership[]
   payments     Payment[]

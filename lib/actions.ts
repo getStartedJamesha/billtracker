@@ -38,6 +38,15 @@ export async function deletePerson(personId: string) {
   revalidatePath("/");
 }
 
+// Free-text context shown next to a person's name, e.g. to note that two
+// people share a household or a phone plan without merging them into one.
+export async function updatePersonNote(personId: string, formData: FormData) {
+  const note = String(formData.get("note") || "").trim();
+  await prisma.person.update({ where: { id: personId }, data: { note: note || null } });
+  revalidatePath("/people");
+  revalidatePath("/subscriptions");
+}
+
 // Moves everything belonging to `fromPersonId` (subscription memberships and
 // bill payments) onto `intoPersonId`, combining amounts where both are
 // already on the same subscription/cycle, then removes the now-empty
