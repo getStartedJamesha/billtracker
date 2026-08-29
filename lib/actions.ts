@@ -339,6 +339,34 @@ export async function deleteCycle(subscriptionId: string, cycleId: string) {
   revalidatePath("/");
 }
 
+// Renames an already-generated cycle's month - for correcting one that was
+// mislabeled before this app could auto-detect a bill's own issue date, or
+// any other manual fix.
+export async function updateCyclePeriod(subscriptionId: string, cycleId: string, formData: FormData) {
+  const periodLabel = String(formData.get("periodLabel") || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(periodLabel)) {
+    throw new Error("Enter the month as YYYY-MM, e.g. 2026-07.");
+  }
+
+  const cycle = await prisma.billCycle.findUniqueOrThrow({ where: { id: cycleId } });
+  if (periodLabel === cycle.periodLabel) return;
+
+  const conflict = await prisma.billCycle.findUnique({
+    where: { subscriptionId_periodLabel: { subscriptionId, periodLabel } },
+  });
+  if (conflict) {
+    throw new Error(`A bill for ${periodLabelToDisplay(periodLabel)} already exists - merge or delete one first.`);
+  }
+
+  const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+  await prisma.billCycle.update({
+    where: { id: cycleId },
+    data: { periodLabel, dueDate: dueDateForPeriod(periodLabel, subscription.dueDay) },
+  });
+  revalidatePath(`/subscriptions/${subscriptionId}`);
+  revalidatePath("/");
+}
+
 export async function togglePayment(subscriptionId: string, paymentId: string) {
   const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
   await prisma.payment.update({

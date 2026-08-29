@@ -13,6 +13,7 @@ import {
   uploadBillFile,
 } from "@/lib/actions";
 import GenerateBillForm from "@/components/GenerateBillForm";
+import EditCyclePeriodForm from "@/components/EditCyclePeriodForm";
 import { formatPhoneDashed } from "@/lib/parseBill";
 import { currentPeriodLabel, nextPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 
@@ -179,6 +180,12 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
                       ${cycle.totalAmount.toFixed(2)} total · {paidCount}/{cycle.payments.length} paid
                       {cycle.dueDate ? ` · due ${new Date(cycle.dueDate).toLocaleDateString()}` : ""}
                     </p>
+                    <EditCyclePeriodForm
+                      subscriptionId={subscription.id}
+                      cycleId={cycle.id}
+                      currentPeriodLabel={cycle.periodLabel}
+                      otherPeriodLabels={subscription.cycles.filter((c) => c.id !== cycle.id).map((c) => c.periodLabel)}
+                    />
                   </div>
                   <form action={deleteCycle.bind(null, subscription.id, cycle.id)}>
                     <button className="text-xs font-medium text-red-600 hover:underline">Delete bill</button>

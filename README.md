@@ -100,7 +100,11 @@ for a network drive.
 8. Made a mistake on an already-generated bill, or need to add a late fee?
    Each payment row in a subscription's Bill history has an **Edit amount**
    toggle to correct just that one person's share, without deleting and
-   regenerating the whole cycle.
+   regenerating the whole cycle. A cycle itself has the same kind of **Edit
+   month** toggle next to its heading, for renaming one that ended up under
+   the wrong month (including a bill already uploaded before this app could
+   detect its issue date automatically) — it's blocked from colliding with
+   another cycle you've already generated for that month.
 
 ### Merging a phone number into an existing person
 
