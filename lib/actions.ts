@@ -344,6 +344,18 @@ export async function togglePayment(subscriptionId: string, paymentId: string) {
   revalidatePath("/");
 }
 
+// Corrects a single person's amount on an already-generated bill (a late
+// fee, a partial-payment adjustment) without having to delete and
+// regenerate the whole cycle.
+export async function updatePaymentAmount(subscriptionId: string, paymentId: string, formData: FormData) {
+  const amountOwed = parseFloat(String(formData.get("amountOwed") || ""));
+  if (Number.isNaN(amountOwed) || amountOwed < 0) throw new Error("Enter a valid amount");
+
+  await prisma.payment.update({ where: { id: paymentId }, data: { amountOwed } });
+  revalidatePath(`/subscriptions/${subscriptionId}`);
+  revalidatePath("/");
+}
+
 // Finds or creates a Person for a bill line's phone number, matching by
 // digits-only phone against everyone in the system (not just current
 // members) so a person billed elsewhere is recognized rather than
@@ -483,5 +495,37 @@ export async function uploadBillFile(subscriptionId: string, cycleId: string, fo
   await prisma.billCycle.update({ where: { id: cycleId }, data: updateData });
 
   revalidatePath(`/subscriptions/${subscriptionId}`);
+  revalidatePath("/");
+}
+
+// ---------- One-off charges ----------
+// A quick "so-and-so owes me $X" entry logged directly against a person,
+// independent of any Subscription/BillCycle - for a one-time cost that
+// doesn't warrant setting up a whole recurring bill for it.
+
+export async function createCharge(formData: FormData) {
+  const personId = String(formData.get("personId") || "");
+  const description = String(formData.get("description") || "").trim();
+  const amount = parseFloat(String(formData.get("amount") || ""));
+
+  if (!personId) throw new Error("Choose who owes this");
+  if (!description) throw new Error("Enter what this charge is for");
+  if (!amount || amount <= 0) throw new Error("Amount must be greater than 0");
+
+  await prisma.charge.create({ data: { personId, description, amount } });
+  revalidatePath("/");
+}
+
+export async function toggleChargePaid(chargeId: string) {
+  const charge = await prisma.charge.findUniqueOrThrow({ where: { id: chargeId } });
+  await prisma.charge.update({
+    where: { id: chargeId },
+    data: { paid: !charge.paid, paidAt: !charge.paid ? new Date() : null },
+  });
+  revalidatePath("/");
+}
+
+export async function deleteCharge(chargeId: string) {
+  await prisma.charge.delete({ where: { id: chargeId } });
   revalidatePath("/");
 }

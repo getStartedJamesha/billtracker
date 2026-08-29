@@ -16,6 +16,7 @@ model Person {
   createdAt    DateTime      @default(now())
   memberships  Membership[]
   payments     Payment[]
+  charges      Charge[]
   phoneAliases PersonPhone[]
 }
 
@@ -85,4 +86,17 @@ model Payment {
   paidAt      DateTime?
 
   @@unique([billCycleId, personId])
+}
+
+// A one-off amount someone owes, logged directly against a person without
+// going through a Subscription/BillCycle (e.g. "Sam owes $20 for dinner").
+model Charge {
+  id          String    @id @default(cuid())
+  personId    String
+  person      Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  description String
+  amount      Float
+  paid        Boolean   @default(false)
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
 }
