@@ -72,7 +72,10 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
               <tbody className="divide-y divide-slate-100">
                 {subscription.memberships.map((m) => (
                   <tr key={m.id}>
-                    <td className="px-4 py-3 font-medium text-slate-900">{m.person.name}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {m.person.name}
+                      {m.person.note && <div className="text-xs font-normal text-slate-400">{m.person.note}</div>}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{m.person.phone || "—"}</td>
                     {subscription.splitType === "custom" && (
                       <td className="px-4 py-3">

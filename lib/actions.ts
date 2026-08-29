@@ -38,14 +38,39 @@ export async function deletePerson(personId: string) {
   revalidatePath("/");
 }
 
-// Moves everything belonging to `fromPersonId` (subscription memberships and
-// bill payments) onto `intoPersonId`, combining amounts where both are
-// already on the same subscription/cycle, then removes the now-empty
-// duplicate. Used when a phone number turns out to belong to someone who
-// already has their own Person record (e.g. a bill auto-created separate
-// entries for a spouse's or child's line before it was aliased).
+// Renames a person - most useful for replacing an auto-generated "User12"
+// (from itemized bill parsing, or the surviving side of a phone-alias merge)
+// with their real name.
+export async function updatePersonName(personId: string, formData: FormData) {
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Name is required");
+
+  await prisma.person.update({ where: { id: personId }, data: { name } });
+  revalidatePath("/people");
+  revalidatePath("/subscriptions");
+  revalidatePath("/");
+}
+
+// Free-text context shown next to a person's name, e.g. to note that two
+// people share a household or a phone plan without merging them into one.
+export async function updatePersonNote(personId: string, formData: FormData) {
+  const note = String(formData.get("note") || "").trim();
+  await prisma.person.update({ where: { id: personId }, data: { note: note || null } });
+  revalidatePath("/people");
+  revalidatePath("/subscriptions");
+}
+
+// Moves everything belonging to `fromPersonId` (subscription memberships,
+// bill payments, and phone identity) onto `intoPersonId`, combining amounts
+// where both are already on the same subscription/cycle, then removes the
+// now-empty duplicate. Used when a phone number - or a person picked
+// directly by name - turns out to belong to someone who already has their
+// own Person record (e.g. a bill auto-created separate entries for a
+// spouse's or child's line before it was aliased or renamed).
 async function mergePersonInto(fromPersonId: string, intoPersonId: string) {
-  const [fromMemberships, fromPayments] = await Promise.all([
+  const [fromPerson, intoPerson, fromMemberships, fromPayments] = await Promise.all([
+    prisma.person.findUniqueOrThrow({ where: { id: fromPersonId }, include: { phoneAliases: true } }),
+    prisma.person.findUniqueOrThrow({ where: { id: intoPersonId } }),
     prisma.membership.findMany({ where: { personId: fromPersonId } }),
     prisma.payment.findMany({ where: { personId: fromPersonId } }),
   ]);
@@ -82,7 +107,41 @@ async function mergePersonInto(fromPersonId: string, intoPersonId: string) {
     }
   }
 
+  // Carry the source's own phone identity over as aliases of the survivor,
+  // so a future bill upload for that number still resolves to this person
+  // instead of silently recreating the duplicate we just merged away.
+  const phonesToCarry = new Set<string>();
+  if (fromPerson.phone) {
+    const digits = normalizePhoneDigits(fromPerson.phone);
+    if (digits.length === 10) phonesToCarry.add(digits);
+  }
+  for (const alias of fromPerson.phoneAliases) phonesToCarry.add(alias.phone);
+  if (intoPerson.phone) phonesToCarry.delete(normalizePhoneDigits(intoPerson.phone));
+
+  for (const phone of phonesToCarry) {
+    await prisma.personPhone.upsert({
+      where: { phone },
+      update: { personId: intoPersonId },
+      create: { personId: intoPersonId, phone },
+    });
+  }
+
   await prisma.person.delete({ where: { id: fromPersonId } });
+}
+
+// Merges one person directly into another, picked by name rather than by
+// phone number - e.g. after renaming an auto-generated "User12" to someone's
+// real name, another duplicate can now be folded into them by picking that
+// name from a list instead of having to know/retype a phone number.
+export async function mergeIntoPerson(sourcePersonId: string, formData: FormData) {
+  const targetPersonId = String(formData.get("targetPersonId") || "");
+  if (!targetPersonId) throw new Error("Choose a person to merge into");
+  if (targetPersonId === sourcePersonId) throw new Error("Choose a different person to merge into");
+
+  await mergePersonInto(sourcePersonId, targetPersonId);
+  revalidatePath("/people");
+  revalidatePath("/subscriptions");
+  revalidatePath("/");
 }
 
 // Attaches an extra phone number (e.g. a spouse's or child's line) to an
@@ -115,10 +174,12 @@ export async function addPhoneAlias(personId: string, formData: FormData) {
     (p) => p.id !== personId && p.phone && normalizePhoneDigits(p.phone) === phoneDigits
   );
   if (primaryOwner) {
+    // mergePersonInto carries primaryOwner's own phone (== phoneDigits) over
+    // as an alias of `personId` automatically - nothing left to create here.
     await mergePersonInto(primaryOwner.id, personId);
+  } else {
+    await prisma.personPhone.create({ data: { personId, phone: phoneDigits } });
   }
-
-  await prisma.personPhone.create({ data: { personId, phone: phoneDigits } });
   revalidatePath("/people");
   revalidatePath("/subscriptions");
   revalidatePath("/");

@@ -1,5 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { addPhoneAlias, createPerson, deletePerson, removePhoneAlias } from "@/lib/actions";
+import {
+  addPhoneAlias,
+  createPerson,
+  deletePerson,
+  mergeIntoPerson,
+  removePhoneAlias,
+  updatePersonName,
+  updatePersonNote,
+} from "@/lib/actions";
 import { formatPhoneDashed } from "@/lib/parseBill";
 
 export default async function PeoplePage() {
@@ -17,7 +25,10 @@ export default async function PeoplePage() {
           Sharing a plan with a spouse, kid, or roommate who has their own line? Add that line as an
           &quot;other number&quot; below so a bill charges it to the same person instead of creating a new one.
           If a bill upload already created a separate person for that number, adding it here merges
-          that duplicate&apos;s subscriptions and payment history into this person and removes it.
+          that duplicate&apos;s subscriptions and payment history into this person and removes it. You
+          can also merge two people directly by name using &quot;Merge into&quot; — handy once you&apos;ve
+          renamed an auto-generated &quot;User12&quot; and want to fold another duplicate into them without
+          knowing their phone number.
         </p>
       </div>
 
@@ -58,13 +69,33 @@ export default async function PeoplePage() {
                 <th className="px-4 py-2 font-medium">Phone</th>
                 <th className="px-4 py-2 font-medium">Other numbers (billed to this person)</th>
                 <th className="px-4 py-2 font-medium">Subscriptions</th>
+                <th className="px-4 py-2 font-medium">Merge into</th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {people.map((person) => (
                 <tr key={person.id}>
-                  <td className="px-4 py-3 font-medium text-slate-900">{person.name}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900">
+                    <form action={updatePersonName.bind(null, person.id)} className="flex gap-1">
+                      <input
+                        name="name"
+                        required
+                        defaultValue={person.name}
+                        className="w-40 rounded border border-slate-300 px-2 py-1 text-sm font-medium text-slate-900 focus:border-brand-500 focus:outline-none"
+                      />
+                      <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                    </form>
+                    <form action={updatePersonNote.bind(null, person.id)} className="mt-1 flex gap-1">
+                      <input
+                        name="note"
+                        defaultValue={person.note ?? ""}
+                        placeholder="+ add a note (e.g. same household as…)"
+                        className="w-56 rounded border border-slate-300 px-2 py-1 text-xs font-normal text-slate-600 focus:border-brand-500 focus:outline-none"
+                      />
+                      <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                    </form>
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{person.phone || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">
                     <div className="flex flex-wrap gap-1">
@@ -100,6 +131,35 @@ export default async function PeoplePage() {
                     {person.memberships.length === 0
                       ? "—"
                       : person.memberships.map((m) => m.subscription.name).join(", ")}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {people.length > 1 && (
+                      <form action={mergeIntoPerson.bind(null, person.id)} className="flex gap-1">
+                        <select
+                          name="targetPersonId"
+                          required
+                          defaultValue=""
+                          className="w-36 rounded border border-slate-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                        >
+                          <option value="" disabled>
+                            Choose person…
+                          </option>
+                          {people
+                            .filter((other) => other.id !== person.id)
+                            .map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {other.name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          title="Merge this person into the one selected - moves their subscriptions and payment history over, then removes this row"
+                          className="text-xs font-medium text-brand-600 hover:underline"
+                        >
+                          Merge
+                        </button>
+                      </form>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <form action={deletePerson.bind(null, person.id)}>
