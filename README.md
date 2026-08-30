@@ -91,7 +91,12 @@ for a network drive.
    due date as overdue, and calls out any subscription that hasn't had a
    bill generated yet this month. A **Pending / Paid** toggle at the top of
    the transfers list switches between what's still owed and everyone who's
-   already settled up.
+   already settled up. Next to anyone's total, tap 💬 or 🟢 to open a text
+   or WhatsApp message — pre-filled with their total and an itemized
+   breakdown, addressed to their primary phone number — ready to send from
+   your own device. (These are deep links, not automated sending: no SMS/
+   WhatsApp account or API key needed, and nothing goes out until you tap
+   send yourself.)
 7. For a one-time cost that doesn't need a whole subscription (e.g. "Sam
    owes $20 for dinner"), use **Add a one-off charge** right on the
    Dashboard — pick who, what for, and how much. It shows up alongside
@@ -148,9 +153,11 @@ Roughly in order of how much value they'd add relative to effort:
   expense (utilities, rent, restaurant receipts), not just phone lines.
   Image bills (photos of a receipt) would also need real OCR first —
   Tesseract.js or a vision-capable model.
-- **Reminders.** Since every person already has a phone number on file, an
-  obvious next step is one-tap reminders — a `tel:`/SMS deep link, or actual
-  automated texts (Twilio) / WhatsApp messages when a share is overdue.
+- **Automated reminders.** The Dashboard's 💬/🟢 buttons (see above) are
+  one-tap deep links you still have to send yourself. Actually automated
+  texts (Twilio) or WhatsApp Business API messages — e.g. auto-firing when
+  a share goes overdue — would need a paid third-party account and API
+  keys, a bigger step up from a client-side link.
 - **Recurring auto-generation.** A monthly cron/background job that
   generates each subscription's bill cycle automatically on the 1st (or on
   its due day), instead of requiring a manual "Generate bill" click.

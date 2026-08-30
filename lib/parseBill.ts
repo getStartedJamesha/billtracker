@@ -2,6 +2,9 @@
 // Only PDFs with a text layer can be parsed; scanned images are stored as-is
 // for reference (see README "Enhancements" for OCR/AI-based extraction ideas).
 
+import { formatPhoneDashed, normalizePhoneDigits } from "./phone";
+export { formatPhoneDashed, normalizePhoneDigits } from "./phone";
+
 const TOTAL_PATTERNS = [
   /total\s*(?:amount)?\s*due[:\s]*\$?\s*([\d,]+\.\d{2})/i,
   /amount\s*due[:\s]*\$?\s*([\d,]+\.\d{2})/i,
@@ -31,15 +34,6 @@ function findLineName(text: string, phoneDigits: string): string | null {
   const pattern = new RegExp(`(?:phone|wearable|line),?\\s*${escaped}\\s*\\r?\\n([A-Za-z][A-Za-z .'-]{1,40})`, "i");
   const match = text.match(pattern);
   return match ? match[1].trim() : null;
-}
-
-export function normalizePhoneDigits(phone: string): string {
-  return phone.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
-}
-
-export function formatPhoneDashed(phoneDigits: string): string {
-  if (phoneDigits.length !== 10) return phoneDigits;
-  return `${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 6)}-${phoneDigits.slice(6)}`;
 }
 
 export interface BillParseResult {
