@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createCharge, toggleChargePaid, togglePayment } from "@/lib/actions";
 import { formatPhoneDashed } from "@/lib/parseBill";
 import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
+import ReminderButtons from "@/components/ReminderButtons";
 
 const personInclude = { phoneAliases: true } as const;
 
@@ -62,6 +63,16 @@ export default async function DashboardPage({
         description: string;
         createdAt: Date;
       };
+
+  function buildReminderMessage(personName: string, personRows: Row[]): string {
+    const total = personRows.reduce((s, r) => s + r.amount, 0);
+    const lines = personRows.map((r) =>
+      r.kind === "payment"
+        ? `- ${r.subscriptionName} (${periodLabelToDisplay(r.periodLabel)}): $${r.amount.toFixed(2)}`
+        : `- ${r.description}: $${r.amount.toFixed(2)}`
+    );
+    return `Hi ${personName}, friendly reminder that you owe $${total.toFixed(2)} total:\n${lines.join("\n")}\n\nThanks!`;
+  }
 
   const paymentsToShow = showPaid ? viewPayments! : pendingPayments;
   const chargesToShow = showPaid ? viewCharges! : pendingCharges;
@@ -221,9 +232,14 @@ export default async function DashboardPage({
                       )}
                       {person.note && <p className="text-xs text-slate-400">{person.note}</p>}
                     </div>
-                    <p className={`text-lg font-bold ${showPaid ? "text-green-600" : "text-amber-600"}`}>
-                      ${subtotal.toFixed(2)}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      {!showPaid && person.phone && (
+                        <ReminderButtons phone={person.phone} message={buildReminderMessage(person.name, personRows)} />
+                      )}
+                      <p className={`text-lg font-bold ${showPaid ? "text-green-600" : "text-amber-600"}`}>
+                        ${subtotal.toFixed(2)}
+                      </p>
+                    </div>
                   </div>
                   <ul className="divide-y divide-slate-100">
                     {personRows.map((row) => {
