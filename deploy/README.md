@@ -118,6 +118,30 @@ your phone/laptop instead: it's free for personal use, encrypts
 everything, and only devices you've authorized can reach the Pi, without
 opening any ports on your router.
 
+If Tailscale is already running on the Pi for something else, BillTracker
+is already reachable the same way - Tailscale connects the whole device,
+not one app at a time. Find the address to use:
+
+```bash
+tailscale ip -4          # e.g. 100.x.y.z -> http://100.x.y.z:3000
+tailscale status          # or look up the Pi's MagicDNS name here
+```
+
+With MagicDNS enabled (on by default for personal accounts), the Pi's
+hostname works too: `http://<pi-hostname>:3000`.
+
+**Optional: drop the `:3000`.** `tailscale serve` proxies a local port to a
+clean HTTPS address on your tailnet only (nothing public unless you
+explicitly run `tailscale funnel` instead):
+
+```bash
+sudo tailscale serve --bg --https=443 http://localhost:3000
+```
+
+This makes the app available at `https://<pi-hostname>.<your-tailnet>.ts.net`
+from any device on your tailnet, port-free. Check `tailscale serve status`
+to see it, and `sudo tailscale serve --https=443 off` to undo it.
+
 ## Managing the service
 
 ```bash
