@@ -140,7 +140,11 @@ sudo tailscale serve --bg --https=443 http://localhost:3000
 
 This makes the app available at `https://<pi-hostname>.<your-tailnet>.ts.net`
 from any device on your tailnet, port-free. Check `tailscale serve status`
-to see it, and `sudo tailscale serve --https=443 off` to undo it.
+to see it, and `sudo tailscale serve --https=443 off` to undo it. If port
+443 is already claimed by another app on the same Pi (`tailscale serve
+status` will show it), pick a different HTTPS port instead - e.g.
+`--https=8443` - and both stay up side by side, each at their own port on
+the same hostname.
 
 ## Managing the service
 
@@ -166,3 +170,16 @@ sudo journalctl -u billtracker -f     # live logs
   it, then `sudo systemctl daemon-reload && sudo systemctl restart billtracker`.
 - **`npm run build` is slow**: normal on a Pi, especially the first time
   (a couple of minutes). Subsequent builds after small changes are faster.
+- **A `tailscale serve` (tailnet-only) URL times out, but a `tailscale
+  funnel` URL for another app on the same Pi works fine**: this doesn't
+  mean the serve config is wrong - a Funnel URL is public on the open
+  internet, so it loads from any browser regardless of whether the
+  *client* device has Tailscale installed at all. A plain `serve` URL
+  needs a real private connection between two devices that are both
+  actually on the tailnet. Check the tailnet's device list at
+  https://login.tailscale.com/admin/machines - if the client device
+  (phone/laptop) isn't listed there, install Tailscale on it and sign in
+  with the same account; that's almost always the fix. `nc -zv <pi-ts-ip>
+  <port>` from the client (`Operation timed out` = no real tailnet
+  connection; `succeeded` = something else, e.g. the app itself isn't
+  running) is the fastest way to confirm which side the problem is on.
