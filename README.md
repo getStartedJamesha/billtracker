@@ -96,7 +96,13 @@ for a network drive.
    breakdown, addressed to their primary phone number — ready to send from
    your own device. (These are deep links, not automated sending: no SMS/
    WhatsApp account or API key needed, and nothing goes out until you tap
-   send yourself.)
+   send yourself.) To go through everyone at once instead of one person's
+   card at a time, hit **📣 Remind everyone** above the list — it steps
+   through each person in turn with the same 💬/🟢 buttons, so reminding
+   the whole group is a quick tap-tap-tap instead of hunting through the
+   page. (Neither SMS nor WhatsApp lets a page send on your behalf — that's
+   deliberate, to stop pages from spamming people — so each one still needs
+   your own final tap to send; this just gets you to that tap faster.)
 7. For a one-time cost that doesn't need a whole subscription (e.g. "Sam
    owes $20 for dinner"), use **Add a one-off charge** right on the
    Dashboard — pick who, what for, and how much. It shows up alongside

@@ -2,8 +2,10 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { createCharge, toggleChargePaid, togglePayment } from "@/lib/actions";
 import { formatPhoneDashed } from "@/lib/parseBill";
+import { normalizePhoneDigits } from "@/lib/phone";
 import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 import ReminderButtons from "@/components/ReminderButtons";
+import RemindAllBar from "@/components/RemindAllBar";
 
 const personInclude = { phoneAliases: true } as const;
 
@@ -126,6 +128,22 @@ export default async function DashboardPage({
     byPerson.set(row.personId, list);
   }
 
+  const remindAllEntries = showPaid
+    ? []
+    : Array.from(byPerson.entries()).flatMap(([, personRows]) => {
+        const person = personRows[0].person;
+        if (!person.phone || normalizePhoneDigits(person.phone).length !== 10) return [];
+        return [
+          {
+            personId: person.id,
+            name: person.name,
+            phone: person.phone,
+            total: personRows.reduce((s, r) => s + r.amount, 0),
+            message: buildReminderMessage(person.name, personRows),
+          },
+        ];
+      });
+
   return (
     <div className="space-y-8">
       <div>
@@ -204,8 +222,14 @@ export default async function DashboardPage({
         </form>
       </div>
 
+      {!showPaid && remindAllEntries.length > 0 && (
+        <div>
+          <RemindAllBar entries={remindAllEntries} />
+        </div>
+      )}
+
       <div>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">{showPaid ? "Paid" : "Pending transfers"}</h2>
           <div className="flex gap-1 rounded-md bg-slate-100 p-1 text-sm">
             <Link
