@@ -7,6 +7,16 @@ import ReminderButtons from "@/components/ReminderButtons";
 
 const personInclude = { phoneAliases: true } as const;
 
+// Names extracted from bills often come through in ALL CAPS (e.g. "IMRAN
+// SHAH") - this is just for the greeting line, not stored anywhere.
+function toTitleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .split(" ")
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -71,7 +81,10 @@ export default async function DashboardPage({
         ? `- ${r.subscriptionName} (${periodLabelToDisplay(r.periodLabel)}): $${r.amount.toFixed(2)}`
         : `- ${r.description}: $${r.amount.toFixed(2)}`
     );
-    return `Hi ${personName}, friendly reminder that you owe $${total.toFixed(2)} total:\n${lines.join("\n")}\n\nThanks!`;
+    const greetingName = toTitleCase(personName);
+    return `Assalaamu alaikum Wa Rahmathullahi Wa Barakathahu ${greetingName}, friendly reminder that you owe $${total.toFixed(
+      2
+    )} total:\n\n${lines.join("\n")}\n\n‏جزاك الله خيرا`;
   }
 
   const paymentsToShow = showPaid ? viewPayments! : pendingPayments;
