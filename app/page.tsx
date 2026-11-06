@@ -1,11 +1,29 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { createCharge, toggleChargePaid, togglePayment } from "@/lib/actions";
+import {
+  createCharge,
+  recordChargePartialPayment,
+  recordPartialPayment,
+  toggleChargePaid,
+  togglePayment,
+} from "@/lib/actions";
 import { formatPhoneDashed } from "@/lib/parseBill";
+import { normalizePhoneDigits } from "@/lib/phone";
 import { currentPeriodLabel, periodLabelToDisplay } from "@/lib/period";
 import ReminderButtons from "@/components/ReminderButtons";
+import RemindAllBar from "@/components/RemindAllBar";
 
 const personInclude = { phoneAliases: true } as const;
+
+// Names extracted from bills often come through in ALL CAPS (e.g. "IMRAN
+// SHAH") - this is just for the greeting line, not stored anywhere.
+function toTitleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .split(" ")
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -47,6 +65,8 @@ export default async function DashboardPage({
         personId: string;
         person: (typeof pendingPayments)[number]["person"];
         amount: number;
+        amountPaid: number;
+        paymentNote: string | null;
         paid: boolean;
         subscriptionId: string;
         subscriptionName: string;
@@ -59,6 +79,8 @@ export default async function DashboardPage({
         personId: string;
         person: (typeof pendingCharges)[number]["person"];
         amount: number;
+        amountPaid: number;
+        paymentNote: string | null;
         paid: boolean;
         description: string;
         createdAt: Date;
@@ -71,7 +93,10 @@ export default async function DashboardPage({
         ? `- ${r.subscriptionName} (${periodLabelToDisplay(r.periodLabel)}): $${r.amount.toFixed(2)}`
         : `- ${r.description}: $${r.amount.toFixed(2)}`
     );
-    return `Hi ${personName}, friendly reminder that you owe $${total.toFixed(2)} total:\n${lines.join("\n")}\n\nThanks!`;
+    const greetingName = toTitleCase(personName);
+    return `Assalaamu alaikum Wa Rahmathullahi Wa Barakathahu ${greetingName}, friendly reminder that you owe $${total.toFixed(
+      2
+    )} total:\n\n${lines.join("\n")}\n\n‏جزاك الله خيرا`;
   }
 
   const paymentsToShow = showPaid ? viewPayments! : pendingPayments;
@@ -85,6 +110,8 @@ export default async function DashboardPage({
         personId: p.personId,
         person: p.person,
         amount: p.amountOwed,
+        amountPaid: p.amountPaid,
+        paymentNote: p.paymentNote,
         paid: p.paid,
         subscriptionId: p.billCycle.subscriptionId,
         subscriptionName: p.billCycle.subscription.name,
@@ -99,6 +126,8 @@ export default async function DashboardPage({
         personId: c.personId,
         person: c.person,
         amount: c.amount,
+        amountPaid: c.amountPaid,
+        paymentNote: c.paymentNote,
         paid: c.paid,
         description: c.description,
         createdAt: c.createdAt,
@@ -112,6 +141,22 @@ export default async function DashboardPage({
     list.push(row);
     byPerson.set(row.personId, list);
   }
+
+  const remindAllEntries = showPaid
+    ? []
+    : Array.from(byPerson.entries()).flatMap(([, personRows]) => {
+        const person = personRows[0].person;
+        if (!person.phone || normalizePhoneDigits(person.phone).length !== 10) return [];
+        return [
+          {
+            personId: person.id,
+            name: person.name,
+            phone: person.phone,
+            total: personRows.reduce((s, r) => s + r.amount, 0),
+            message: buildReminderMessage(person.name, personRows),
+          },
+        ];
+      });
 
   return (
     <div className="space-y-8">
@@ -191,8 +236,14 @@ export default async function DashboardPage({
         </form>
       </div>
 
+      {!showPaid && remindAllEntries.length > 0 && (
+        <div>
+          <RemindAllBar entries={remindAllEntries} />
+        </div>
+      )}
+
       <div>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">{showPaid ? "Paid" : "Pending transfers"}</h2>
           <div className="flex gap-1 rounded-md bg-slate-100 p-1 text-sm">
             <Link
@@ -245,6 +296,8 @@ export default async function DashboardPage({
                     {personRows.map((row) => {
                       if (row.kind === "payment") {
                         const overdue = !showPaid && row.dueDate && new Date(row.dueDate) < today;
+                        const partial = !showPaid && row.amountPaid > 0;
+                        const remaining = row.amount - row.amountPaid;
                         return (
                           <li key={`payment-${row.id}`} className="py-1">
                             <div className="flex flex-wrap items-center gap-2 px-1 pt-1 text-xs">
@@ -270,20 +323,64 @@ export default async function DashboardPage({
                                 <span className="flex items-center gap-2">
                                   <span
                                     className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                                      showPaid ? "border-green-500 bg-green-500 text-white" : "border-slate-300 text-transparent"
+                                      showPaid
+                                        ? "border-green-500 bg-green-500 text-white"
+                                        : partial
+                                          ? "border-amber-500 bg-amber-100 text-amber-600"
+                                          : "border-slate-300 text-transparent"
                                     }`}
                                   >
-                                    ✓
+                                    {showPaid ? "✓" : partial ? "½" : "✓"}
                                   </span>
                                   <span className="text-slate-500">{showPaid ? "Paid" : "Mark paid"}</span>
                                 </span>
                                 <span className="font-semibold text-slate-800">${row.amount.toFixed(2)}</span>
                               </button>
                             </form>
+                            {partial && (
+                              <p className="px-2 pb-1 text-xs text-amber-700">
+                                Partially paid: ${row.amountPaid.toFixed(2)} of ${row.amount.toFixed(2)} ($
+                                {remaining.toFixed(2)} remaining)
+                                {row.paymentNote && ` — ${row.paymentNote}`}
+                              </p>
+                            )}
+                            {!partial && row.paymentNote && (
+                              <p className="px-2 pb-1 text-xs text-slate-400">{row.paymentNote}</p>
+                            )}
+                            {!showPaid && (
+                              <details className="px-2 pb-1">
+                                <summary className="cursor-pointer text-xs text-brand-600 hover:underline">
+                                  Record a payment
+                                </summary>
+                                <form
+                                  action={recordPartialPayment.bind(null, row.subscriptionId, row.id)}
+                                  className="mt-1 flex flex-wrap items-center gap-2 pb-1"
+                                >
+                                  <input
+                                    name="amountPaid"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    defaultValue={row.amountPaid || ""}
+                                    placeholder="Amount paid so far"
+                                    className="w-32 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                                  />
+                                  <input
+                                    name="paymentNote"
+                                    defaultValue={row.paymentNote ?? ""}
+                                    placeholder="Note (e.g. paid via Zelle)"
+                                    className="min-w-[160px] flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                                  />
+                                  <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                                </form>
+                              </details>
+                            )}
                           </li>
                         );
                       }
 
+                      const partial = !showPaid && row.amountPaid > 0;
+                      const remaining = row.amount - row.amountPaid;
                       return (
                         <li key={`charge-${row.id}`} className="py-1">
                           <div className="flex flex-wrap items-center gap-2 px-1 pt-1 text-xs">
@@ -301,16 +398,58 @@ export default async function DashboardPage({
                               <span className="flex items-center gap-2">
                                 <span
                                   className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                                    showPaid ? "border-green-500 bg-green-500 text-white" : "border-slate-300 text-transparent"
+                                    showPaid
+                                      ? "border-green-500 bg-green-500 text-white"
+                                      : partial
+                                        ? "border-amber-500 bg-amber-100 text-amber-600"
+                                        : "border-slate-300 text-transparent"
                                   }`}
                                 >
-                                  ✓
+                                  {showPaid ? "✓" : partial ? "½" : "✓"}
                                 </span>
                                 <span className="text-slate-500">{showPaid ? "Paid" : "Mark paid"}</span>
                               </span>
                               <span className="font-semibold text-slate-800">${row.amount.toFixed(2)}</span>
                             </button>
                           </form>
+                          {partial && (
+                            <p className="px-2 pb-1 text-xs text-amber-700">
+                              Partially paid: ${row.amountPaid.toFixed(2)} of ${row.amount.toFixed(2)} ($
+                              {remaining.toFixed(2)} remaining)
+                              {row.paymentNote && ` — ${row.paymentNote}`}
+                            </p>
+                          )}
+                          {!partial && row.paymentNote && (
+                            <p className="px-2 pb-1 text-xs text-slate-400">{row.paymentNote}</p>
+                          )}
+                          {!showPaid && (
+                            <details className="px-2 pb-1">
+                              <summary className="cursor-pointer text-xs text-brand-600 hover:underline">
+                                Record a payment
+                              </summary>
+                              <form
+                                action={recordChargePartialPayment.bind(null, row.id)}
+                                className="mt-1 flex flex-wrap items-center gap-2 pb-1"
+                              >
+                                <input
+                                  name="amountPaid"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  defaultValue={row.amountPaid || ""}
+                                  placeholder="Amount paid so far"
+                                  className="w-32 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                                />
+                                <input
+                                  name="paymentNote"
+                                  defaultValue={row.paymentNote ?? ""}
+                                  placeholder="Note (e.g. paid via Zelle)"
+                                  className="min-w-[160px] flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                                />
+                                <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                              </form>
+                            </details>
+                          )}
                         </li>
                       );
                     })}

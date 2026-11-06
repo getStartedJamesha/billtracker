@@ -6,6 +6,7 @@ import {
   addNewMember,
   deleteCycle,
   deleteSubscription,
+  recordPartialPayment,
   removeMember,
   togglePayment,
   updateMemberShare,
@@ -193,56 +194,98 @@ export default async function SubscriptionDetailPage({ params }: { params: Promi
                 </div>
 
                 <ul className="mt-3 divide-y divide-slate-100">
-                  {cycle.payments.map((p) => (
-                    <li key={p.id}>
-                      <form action={togglePayment.bind(null, subscription.id, p.id)}>
-                        <button
-                          type="submit"
-                          title="Tap to toggle paid status"
-                          className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-3 text-left text-sm transition active:scale-[0.99] ${
-                            p.paid ? "bg-slate-50" : "hover:bg-green-50"
-                          }`}
-                        >
-                          <span className="flex items-center gap-3">
-                            <span
-                              className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                                p.paid
-                                  ? "border-green-500 bg-green-500 text-white"
-                                  : "border-slate-300 text-transparent"
-                              }`}
-                            >
-                              ✓
+                  {cycle.payments.map((p) => {
+                    const partial = !p.paid && p.amountPaid > 0;
+                    const remaining = p.amountOwed - p.amountPaid;
+                    return (
+                      <li key={p.id}>
+                        <form action={togglePayment.bind(null, subscription.id, p.id)}>
+                          <button
+                            type="submit"
+                            title="Tap to toggle paid status"
+                            className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-3 text-left text-sm transition active:scale-[0.99] ${
+                              p.paid ? "bg-slate-50" : "hover:bg-green-50"
+                            }`}
+                          >
+                            <span className="flex items-center gap-3">
+                              <span
+                                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                                  p.paid
+                                    ? "border-green-500 bg-green-500 text-white"
+                                    : partial
+                                      ? "border-amber-500 bg-amber-100 text-amber-600"
+                                      : "border-slate-300 text-transparent"
+                                }`}
+                              >
+                                {p.paid ? "✓" : partial ? "½" : "✓"}
+                              </span>
+                              <span className={`font-medium ${p.paid ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                                {p.person.name}
+                              </span>
                             </span>
-                            <span className={`font-medium ${p.paid ? "text-slate-400 line-through" : "text-slate-800"}`}>
-                              {p.person.name}
+                            <span className={`font-medium ${p.paid ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                              ${p.amountOwed.toFixed(2)}
                             </span>
-                          </span>
-                          <span className={`font-medium ${p.paid ? "text-slate-400 line-through" : "text-slate-700"}`}>
-                            ${p.amountOwed.toFixed(2)}
-                          </span>
-                        </button>
-                      </form>
-                      <details className="px-2 pb-1">
-                        <summary className="cursor-pointer text-xs text-brand-600 hover:underline">
-                          Edit amount
-                        </summary>
-                        <form
-                          action={updatePaymentAmount.bind(null, subscription.id, p.id)}
-                          className="mt-1 flex items-center gap-2 pb-1"
-                        >
-                          <input
-                            name="amountOwed"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            defaultValue={p.amountOwed}
-                            className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                          />
-                          <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                          </button>
                         </form>
-                      </details>
-                    </li>
-                  ))}
+                        {partial && (
+                          <p className="px-2 pb-1 text-xs text-amber-700">
+                            Partially paid: ${p.amountPaid.toFixed(2)} of ${p.amountOwed.toFixed(2)} ($
+                            {remaining.toFixed(2)} remaining)
+                            {p.paymentNote && ` — ${p.paymentNote}`}
+                          </p>
+                        )}
+                        {!partial && p.paymentNote && (
+                          <p className="px-2 pb-1 text-xs text-slate-400">{p.paymentNote}</p>
+                        )}
+                        <details className="px-2 pb-1">
+                          <summary className="cursor-pointer text-xs text-brand-600 hover:underline">
+                            Edit amount
+                          </summary>
+                          <form
+                            action={updatePaymentAmount.bind(null, subscription.id, p.id)}
+                            className="mt-1 flex items-center gap-2 pb-1"
+                          >
+                            <input
+                              name="amountOwed"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              defaultValue={p.amountOwed}
+                              className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                            />
+                            <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                          </form>
+                        </details>
+                        <details className="px-2 pb-1">
+                          <summary className="cursor-pointer text-xs text-brand-600 hover:underline">
+                            Record a payment
+                          </summary>
+                          <form
+                            action={recordPartialPayment.bind(null, subscription.id, p.id)}
+                            className="mt-1 flex flex-wrap items-center gap-2 pb-1"
+                          >
+                            <input
+                              name="amountPaid"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              defaultValue={p.amountPaid || ""}
+                              placeholder="Amount paid so far"
+                              className="w-32 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                            />
+                            <input
+                              name="paymentNote"
+                              defaultValue={p.paymentNote ?? ""}
+                              placeholder="Note (e.g. paid via Zelle)"
+                              className="min-w-[160px] flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                            />
+                            <button className="text-xs font-medium text-brand-600 hover:underline">Save</button>
+                          </form>
+                        </details>
+                      </li>
+                    );
+                  })}
                 </ul>
 
                 <div className="mt-3 border-t border-slate-100 pt-3">

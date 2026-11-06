@@ -369,9 +369,38 @@ export async function updateCyclePeriod(subscriptionId: string, cycleId: string,
 
 export async function togglePayment(subscriptionId: string, paymentId: string) {
   const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+  const nowPaid = !payment.paid;
   await prisma.payment.update({
     where: { id: paymentId },
-    data: { paid: !payment.paid, paidAt: !payment.paid ? new Date() : null },
+    data: {
+      paid: nowPaid,
+      paidAt: nowPaid ? new Date() : null,
+      amountPaid: nowPaid ? payment.amountOwed : 0,
+    },
+  });
+  revalidatePath(`/subscriptions/${subscriptionId}`);
+  revalidatePath("/");
+}
+
+// Records a payment that doesn't cover the full amount owed (or tops up an
+// earlier partial payment), with an optional note - e.g. "Paid $40 via
+// Zelle on Nov 3, rest next payday". Marks the payment fully paid once the
+// running total reaches what's owed.
+export async function recordPartialPayment(subscriptionId: string, paymentId: string, formData: FormData) {
+  const amountPaid = parseFloat(String(formData.get("amountPaid") || ""));
+  if (Number.isNaN(amountPaid) || amountPaid < 0) throw new Error("Enter a valid amount");
+  const paymentNote = String(formData.get("paymentNote") || "").trim();
+
+  const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+  const paid = amountPaid >= payment.amountOwed;
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      amountPaid,
+      paymentNote: paymentNote || null,
+      paid,
+      paidAt: paid ? payment.paidAt ?? new Date() : null,
+    },
   });
   revalidatePath(`/subscriptions/${subscriptionId}`);
   revalidatePath("/");
@@ -584,9 +613,35 @@ export async function createCharge(formData: FormData) {
 
 export async function toggleChargePaid(chargeId: string) {
   const charge = await prisma.charge.findUniqueOrThrow({ where: { id: chargeId } });
+  const nowPaid = !charge.paid;
   await prisma.charge.update({
     where: { id: chargeId },
-    data: { paid: !charge.paid, paidAt: !charge.paid ? new Date() : null },
+    data: {
+      paid: nowPaid,
+      paidAt: nowPaid ? new Date() : null,
+      amountPaid: nowPaid ? charge.amount : 0,
+    },
+  });
+  revalidatePath("/");
+}
+
+// See recordPartialPayment - same idea, for a one-off Charge instead of a
+// subscription Payment.
+export async function recordChargePartialPayment(chargeId: string, formData: FormData) {
+  const amountPaid = parseFloat(String(formData.get("amountPaid") || ""));
+  if (Number.isNaN(amountPaid) || amountPaid < 0) throw new Error("Enter a valid amount");
+  const paymentNote = String(formData.get("paymentNote") || "").trim();
+
+  const charge = await prisma.charge.findUniqueOrThrow({ where: { id: chargeId } });
+  const paid = amountPaid >= charge.amount;
+  await prisma.charge.update({
+    where: { id: chargeId },
+    data: {
+      amountPaid,
+      paymentNote: paymentNote || null,
+      paid,
+      paidAt: paid ? charge.paidAt ?? new Date() : null,
+    },
   });
   revalidatePath("/");
 }
