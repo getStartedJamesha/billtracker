@@ -42,10 +42,11 @@ for a network drive.
 - **BillCycle** — one month's instance of a subscription's bill (e.g. "August
   2026"), with its own total (in case it varies month to month) and an
   optional uploaded bill file.
-- **Payment** — one person's share of one bill cycle, with a paid/unpaid flag.
+- **Payment** — one person's share of one bill cycle, with a paid/unpaid flag,
+  a running `amountPaid` total (for partial payments), and an optional note.
 - **Charge** — a one-off amount someone owes, logged directly against a
   person without a Subscription/BillCycle at all (e.g. "Sam owes $20 for
-  dinner").
+  dinner"), with the same partial-payment tracking as a Payment.
 
 ## How it's meant to be used
 
@@ -85,7 +86,13 @@ for a network drive.
      note instead of guessing.
 5. As friends pay you back, tap their row (or **Mark paid**) — it's a
    single tap, no confirmation dialog, and it flips right back if you tap
-   it again by mistake.
+   it again by mistake. If someone's only paid you part of what they owe,
+   use **Record a payment** underneath instead — enter how much they've
+   paid so far and an optional note (e.g. "Paid $40 via Zelle on Nov 3,
+   rest next payday"). The row shows an amber half-circle and the
+   remaining balance until the amount paid reaches the full share, at
+   which point it's automatically marked paid. This works the same way on
+   the Dashboard and on a subscription's Bill history.
 6. The **Dashboard** rolls up every unpaid share across every subscription,
    grouped by person with their phone number handy, flags anything past its
    due date as overdue, and calls out any subscription that hasn't had a

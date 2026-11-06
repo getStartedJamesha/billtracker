@@ -76,14 +76,16 @@ model BillCycle {
 
 // One person's share of one month's bill.
 model Payment {
-  id          String    @id @default(cuid())
-  billCycleId String
-  billCycle   BillCycle @relation(fields: [billCycleId], references: [id], onDelete: Cascade)
-  personId    String
-  person      Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
-  amountOwed  Float
-  paid        Boolean   @default(false)
-  paidAt      DateTime?
+  id           String    @id @default(cuid())
+  billCycleId  String
+  billCycle    BillCycle @relation(fields: [billCycleId], references: [id], onDelete: Cascade)
+  personId     String
+  person       Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  amountOwed   Float
+  amountPaid   Float     @default(0) // running total actually received - can be less than amountOwed for a partial payment
+  paymentNote  String? // free-text note about the payment, e.g. "Paid $40 via Zelle on Nov 3, rest next payday"
+  paid         Boolean   @default(false) // true once amountPaid >= amountOwed
+  paidAt       DateTime?
 
   @@unique([billCycleId, personId])
 }
@@ -96,7 +98,9 @@ model Charge {
   person      Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
   description String
   amount      Float
-  paid        Boolean   @default(false)
+  amountPaid  Float     @default(0) // running total actually received - can be less than amount for a partial payment
+  paymentNote String? // free-text note about the payment, e.g. "Paid $10 cash on Nov 3, rest next payday"
+  paid        Boolean   @default(false) // true once amountPaid >= amount
   paidAt      DateTime?
   createdAt   DateTime  @default(now())
 }
