@@ -53,7 +53,9 @@ export default async function DashboardPage({
   ]);
 
   const missingThisMonth = subscriptions.filter((s) => s.cycles.length === 0);
-  const totalPending = pendingPayments.reduce((sum, p) => sum + p.amountOwed, 0) + pendingCharges.reduce((sum, c) => sum + c.amount, 0);
+  const totalPending =
+    pendingPayments.reduce((sum, p) => sum + (p.amountOwed - p.amountPaid), 0) +
+    pendingCharges.reduce((sum, c) => sum + (c.amount - c.amountPaid), 0);
   const pendingCount = pendingPayments.length + pendingCharges.length;
   const pendingPeopleIds = new Set([...pendingPayments.map((p) => p.personId), ...pendingCharges.map((c) => c.personId)]);
   const today = new Date();
@@ -86,12 +88,16 @@ export default async function DashboardPage({
         createdAt: Date;
       };
 
+  function remainingOf(row: Row): number {
+    return Math.max(row.amount - row.amountPaid, 0);
+  }
+
   function buildReminderMessage(personName: string, personRows: Row[]): string {
-    const total = personRows.reduce((s, r) => s + r.amount, 0);
+    const total = personRows.reduce((s, r) => s + remainingOf(r), 0);
     const lines = personRows.map((r) =>
       r.kind === "payment"
-        ? `- ${r.subscriptionName} (${periodLabelToDisplay(r.periodLabel)}): $${r.amount.toFixed(2)}`
-        : `- ${r.description}: $${r.amount.toFixed(2)}`
+        ? `- ${r.subscriptionName} (${periodLabelToDisplay(r.periodLabel)}): $${remainingOf(r).toFixed(2)}`
+        : `- ${r.description}: $${remainingOf(r).toFixed(2)}`
     );
     const greetingName = toTitleCase(personName);
     return `Assalaamu alaikum Wa Rahmathullahi Wa Barakathahu ${greetingName}, friendly reminder that you owe $${total.toFixed(
@@ -152,7 +158,7 @@ export default async function DashboardPage({
             personId: person.id,
             name: person.name,
             phone: person.phone,
-            total: personRows.reduce((s, r) => s + r.amount, 0),
+            total: personRows.reduce((s, r) => s + remainingOf(r), 0),
             message: buildReminderMessage(person.name, personRows),
           },
         ];
@@ -268,7 +274,7 @@ export default async function DashboardPage({
           <div className="space-y-4">
             {Array.from(byPerson.entries()).map(([personId, personRows]) => {
               const person = personRows[0].person;
-              const subtotal = personRows.reduce((s, r) => s + r.amount, 0);
+              const subtotal = personRows.reduce((s, r) => s + (showPaid ? r.amount : remainingOf(r)), 0);
               return (
                 <div key={personId} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex items-center justify-between">
